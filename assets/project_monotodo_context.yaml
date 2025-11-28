@@ -1,0 +1,1431 @@
+project_name: MonoToDo
+project_codename: monotodo-app
+language: ja
+
+assistant_role:
+  description: >
+    あなた（ChatGPT）は、ユーザーの開発パートナー兼メンターとして、
+    MonoToDo（モノトド）の仕様・設計・実装を一緒に詰めていく。
+    仕様の整合性・DB一貫性・UX思想・クリーンアーキテクチャを最優先し、
+    「未確定のまま実装に進まない」ことを絶対ルールとする。
+  constraints:
+    - 仕様・DB・UX・セキュリティ・アーキ整合を常に優先する
+    - 未確定の状態を放置して先に進まない（ただし未確定を解消するための案出しはOK）
+    - 確定仕様と矛盾しそうな点があれば必ず指摘し、矛盾解消 → 再確定の順で進める
+    - 不要な機能提案や機能肥大を避け、MVPにフォーカスする
+
+user_profile:
+  interests:
+    - 生産性・学習アプリ
+    - Webフロントエンド（Vite+React+TS）
+    - Supabase / Postgres / RLS / RPC
+    - クリーンアーキテクチャ
+  working_style:
+    - 理詰め・仕様駆動
+    - DBで「ガチガチ」に一貫性を担保する方針が好き
+    - 設計と実装の対応関係をはっきりさせたい
+  expectations_for_assistant:
+    - 単なるコード提供ではなく、設計〜実装まで一貫して伴走してほしい
+    - 矛盾や危うい点があれば、きちんと突っ込んでほしい
+    - 不足や盲点を積極的に指摘してほしい
+
+background:
+  motivation: |
+    書籍『奪われた集中力（Stolen Focus）』の考え方と
+    「ブロック計画法 × ToDoリスト × ポモドーロタイマー」を統合した、
+    注意の分断を減らす学習・生産性Webアプリを作る。
+
+    ゴチャゴチャしたタスク管理ツールではなく、
+    「今やる一つだけ」に視点を強制的に絞り、
+    ポモドーロブロックで着手と前進を自動化することが狙い。
+  goal_statement: |
+    “今やる一つだけ”に視野を絞り、ポモドーロの集中ブロックで着手と前進を自動化する。
+    注意の分断をUIの制約で減らし、開始ハードルを下げ、進捗実感
+    （完了タスク数・streak・サブゴール完遂率）を提供する簡単なWebアプリを作る。
+  core_philosophy:
+    - 視点は常に「次の一つ」に固定する
+    - UI制約で注意分断・選択負荷を減らす
+    - Focus中は操作を極限まで制限し、ナビゲーションも隠す
+    - データ整合性・制約はできる限りDBレイヤーでガチガチに担保する
+    - 長期履歴や多目的管理よりも、「一つの大きな目的に集中」することを優先
+    - 必要になったらGoalリセットで全削除してやり直せる設計とする
+
+pages:
+  list:
+    - login
+    - setting
+    - plan
+    - do
+    - focus
+  flow: |
+    - アプリの入口は常に Do ページ。
+    - Do が「次のタスク無し」を検知すると、空状態(U5)ルールに従い Plan に誘導。
+    - Plan で Goal → Subgoal → Task を作成・編集。
+    - Do は「次のタスク」を 1 件だけカード表示し、「開始」で Focus へ遷移。
+    - Focus でポモドーロを実行し、中断/完了時は必ず確認ダイアログを出し、
+      確定後に Do へ戻る。
+    - Focus 中はナビゲーション非表示・他ページ遷移不可・タスク切替不可。
+
+domain_model:
+  goal:
+    description: |
+      ユーザーにつき常に 1 つだけ存在する「目的」。
+      ユーザーは複数の目的を同時に管理せず、
+      今いちばん重要な大きなテーマを 1 つだけ選び、その中でブロック計画を行う。
+    constraints:
+      - 1ユーザー1Goal（goals.user_id に unique index）
+      - Goal タイトルは空文字OK（未設定でもよい）
+      - Goal が存在しない状態で Subgoal 挿入が来た場合、
+        DB側で空Goalを自動生成し、そのユーザーのGoalとして採用する
+  subgoal:
+    alias: block
+    description: |
+      Goal を構成する中くらいの単位（ブロック）。
+      各 Subgoal 配下に Task をぶら下げることで、目的をブロック計画法的に分解する。
+    constraints:
+      - 各 Goal あたり最大 30 件
+      - title は 255 文字まで
+      - order は正の整数で、Goal ごとに連番に正規化（サーバー側トリガー）
+      - completed は「通常タスクのみが全て完了したとき」に true になる
+      - 通常タスクが 0 件の場合は completed=false（完遂率 0%）
+  task:
+    description: |
+      Subgoal を構成する最小作業単位。
+      通常タスクとループタスク（習慣）の2種類がある。
+    types:
+      normal:
+        is_loop: false
+        role: |
+          Subgoal 完遂率および Subgoal.completed の判定対象。
+          一度完了した通常タスクは再び未完に戻さない限り、その Subgoal の進捗としてカウントされ続ける。
+      loop:
+        is_loop: true
+        role: |
+          サブゴールに紐づく習慣・繰り返し作業（例：毎日25分英語長文を読む）。
+          Subgoal 完遂率や completed 判定には含めないが、
+          日毎に完了した回数が task_completion_logs と Goal メトリクスに反映され、
+          streak には「その日1つでも完了があればOK」という条件の一部として影響する。
+    constraints:
+      - 各 Subgoal あたり最大 30 件（完了済みも含む）
+      - title 255 文字まで
+      - order は正の整数で、Subgoal ごとに連番に正規化（サーバー側トリガー）
+      - completed / completed_at を保持
+  metrics:
+    description: DBで管理する冗長メトリクス。
+    items:
+      completed_normal_task_count:
+        source: goals.completed_normal_task_count
+        meaning: >
+          「これまで完了してきた通常タスクのネット回数」。
+          complete → +1, uncomplete → -1。
+          完了済みタスクを削除しても減らさない（努力の履歴は残す）。
+      total_completed_loop_task_count:
+        source: goals.total_completed_loop_task_count
+        meaning: >
+          これまで日次ログに記録されたループタスク完了回数の累積。
+      current_streak:
+        source: goals.current_streak
+        meaning: >
+          連続完了日数。各日について、その Goal に関して通常/ループいずれか
+          1 つでも最終的に完了していれば streak++。
+          ログがない、または had_any_completion=false の日は streak が途切れる。
+
+do_page_logic:
+  next_task:
+    description: Do ページに表示する「次のタスク」を 1 件だけ決定するロジック。
+    selection_criteria:
+      - 対象は未完了タスクのみ（通常＋ループ）
+      - 優先順位:
+        1. subgoals.order 昇順
+        2. subgoals.created_at 昇順
+        3. tasks.order 昇順
+        4. tasks.created_at 昇順
+      - Subgoal 完遂率は「通常タスクのみ」を対象に整数%で算出。
+  empty_states:
+    priority_order: [E1, E2, E3]
+    E1:
+      condition: サブゴール0件
+      heading: "目的に向けて、最初のブロックを作ろう"
+      body: |
+        このアプリでは“目的（Goal）”に到達するために、サブゴール（ブロック）とタスクに分けて進めます。
+        Planでサブゴールとタスクを設定すると、Doに“次のタスク”が表示されます。
+      button_label: "Planでブロックを作る"
+    E2:
+      condition: サブゴールはあるが通常タスク0件
+      heading: "目的に合わせて、タスクまで落とし込もう"
+      body: |
+        サブゴール（ブロック）を、達成のための通常タスクに分けて設定しましょう。
+        通常タスクを設定すると、ここに“次のタスク”が表示されます。
+      button_label: "Planでタスクを追加"
+    E3:
+      condition: 未完了候補0件（全タスク完了）
+      heading: "タスクはすべて完了しています"
+      body: "新しいタスクを追加する場合はPlanへ進んでください。"
+      button_label: "Planでタスクを追加"
+
+focus_page_logic:
+  restrictions:
+    - Focus中はナビゲーションバー非表示
+    - 他ページへの遷移不可（Back操作も制御）
+    - タスクの切替不可
+  controls:
+    timer:
+      representation:
+        - 中央の大きな mm:ss 表示
+        - 円形プログレスバー（react-circular-progressbar）
+    buttons:
+      - label: "一時停止/再開"
+        behavior: 単一トグルボタン。押すたびに pause/resume を切り替え。メトリクスには影響しない。
+      - label: "中断"
+        behavior: 中断確認ポップアップを出す。
+      - label: "終了（完了）"
+        behavior: 完了確認ポップアップを出す。
+  dialogs:
+    pause_resume:
+      effect: メトリクス/logsには影響せず、タイマー挙動のみ制御。
+    interrupt:
+      text: "タスクは完了になりません。セッションを中断しますか？"
+      buttons: ["続ける", "中断して戻る", "キャンセル"]
+      on_confirm: タスク/ログ/メトリクスは更新せず Do に戻る。
+    complete:
+      text: "タスクが完了になります。セッションを終了しますか？"
+      buttons: ["完了して戻る", "続ける", "キャンセル"]
+      on_confirm: |
+        対象タスク completed=true、logs/metrics/streak 更新、Do へ戻る。
+
+plan_page_behavior:
+  goal_input:
+    description: Goal タイトル 1 行入力。空でもOKだがプレースホルダで入力を促す。
+  subgoal_list:
+    interaction:
+      - DnDで並び替え（order は DB 側で連番に正規化）
+      - 削除ボタンあり（強調しすぎない）
+      - Subgoal 上限 30 件。上限超過時は追加ボタン非活性、Enter追加も無反応。
+    enter_behavior:
+      subgoal_title: >
+        サブゴールタイトル入力確定後に Enter を押すと、
+        その Subgoal の Task リスト末尾に新しい Task 行を追加する（仕様案）。  
+        ※具体的なフォーカス遷移と運用は今後の実装フェーズで最終確定。
+  task_list:
+    behavior:
+      - 1 Subgoal 内に複数 Task 行
+      - IME確定済みの Enter で「入力確定＋新規行追加」
+      - IME 確定中の Enter は追加扱いしない
+      - DnD で並び替え
+      - 削除アイコンあり
+      - is_loop トグルで通常/ループ切替（UI上の表示は控えめ）
+      - Subgoal毎に Task 上限 30 件。上限超過時は追加ボタン非活性、Enter追加も無反応。
+
+metrics_and_logs:
+  logs_table: task_completion_logs
+  log_semantics: |
+    - 粒度は (user_id, goal_id, activity_date) で 1 行。
+    - had_any_completion: その日、そのGoalで通常/ループ問わず1つでも完了状態があれば true。
+    - completed_loop_count: その日に完了したループタスクの回数。
+    - completion_counter: その日の「完了状態のタスク数」（通常＋ループ）の内部カウンタ。
+  aggregation:
+    function: monotodo_aggregate_missing_days
+    behavior: |
+      - last_aggregated_date の翌日から「昨日」までの task_completion_logs を順に処理。
+      - ログなし or had_any_completion=false の日は streak を 0 に戻す。
+      - had_any_completion=true の日は streak++。
+      - completed_loop_count を total_completed_loop_task_count に加算。
+      - last_aggregated_date を昨日まで進める。
+      - 帰り値として streak_changed / metrics_changed を返し、
+        Do ページのトースト表示(U7)に利用する。
+      - 集計後、そのユーザーのループタスク completed=true をすべて
+        completed=false にリセット（メトリクスは減らさない）。
+
+error_codes:
+  description: DB → フロントで共通的に扱うエラーキー。UIでの文言はキーから一意にマッピング。
+  keys:
+    - MONOTODO_GOAL_EXISTS
+    - MONOTODO_FORBIDDEN
+    - MONOTODO_UNAUTHORIZED
+    - MONOTODO_SUBGOAL_LIMIT_EXCEEDED
+    - MONOTODO_TASK_LIMIT_EXCEEDED
+    - MONOTODO_TITLE_TOO_LONG
+    - MONOTODO_INVALID_ORDER
+    - MONOTODO_SAVE_FAILED_RETRY
+
+tech_stack:
+  frontend:
+    - Vite
+    - React
+    - TypeScript
+    - TailwindCSS
+    - shadcn/ui
+    - react-router-dom
+    - react-circular-progressbar
+  backend:
+    - Supabase (Auth / Postgres / RLS / RPC / トリガー)
+  deployment:
+    - Vercel
+  optional:
+    - PWA（オフラインキュー＋オンライン時同期は将来実装予定）
+  ai_integration:
+    provider: Google AI Studio (Gemini)
+    usage_plan: |
+      - Plan ページに AI 提案パネルを設ける。
+      - Goal / Subgoal / Task の情報をもとにサブゴール案・タスク案を生成。
+      - 採用 / 非採用を ai_suggestion_sessions / ai_suggestion_items にログとして保存。
+      - MVP では feature flag で OFF としておき、Plan UI 完成後に仕様を確定して ON にする。
+
+filesystem_layout:
+  root:
+    path: monotodo-app/
+    structure: |
+      monotodo-app/
+      ├─ node_modules/      # 依存ライブラリ
+      ├─ public/            # 静的ファイル
+      ├─ src/               # フロントエンドの本体コード
+      └─ supabase/          # DB（Postgres / Supabase）関連のSQL
+  src:
+    structure: |
+      src/
+      ├─ App.tsx
+      ├─ env.d.ts
+      ├─ main.tsx
+      │
+      ├─ assets/
+      │  └─ react.svg
+      │
+      ├─ components/
+      │  ├─ layouts/
+      │  │  ├─ AppLayout.tsx       # 通常レイアウト（Nav付き）
+      │  │  └─ FocusLayout.tsx     # Focus専用レイアウト（Navなし）
+      │  │
+      │  └─ ui/                    # shadcn/ui ベースのUI部品
+      │     ├─ button.tsx
+      │     ├─ dialog.tsx
+      │     └─ input.tsx
+      │
+      ├─ features/
+      │  ├─ do/
+      │  │  └─ hooks/
+      │  │      └─ useDoPageData.ts
+      │  │
+      │  ├─ focus/
+      │  │  └─ hooks/
+      │  │      └─ useFocusTimer.ts
+      │  │
+      │  └─ plan/
+      │      └─ hooks/
+      │          └─ usePlanData.ts
+      │
+      ├─ hooks/                     # 画面横断の共通 hooks 用（今は空）
+      │
+      ├─ lib/
+      │  ├─ supabaseClient.ts      # Supabase クライアント
+      │  └─ utils.ts
+      │
+      ├─ pages/
+      │  ├─ auth/
+      │  │  ├─ LoginPage.tsx
+      │  │  └─ RequireAuth.tsx
+      │  │
+      │  ├─ do/
+      │  │  └─ DoPage.tsx
+      │  │
+      │  ├─ focus/
+      │  │  └─ FocusPage.tsx
+      │  │
+      │  ├─ plan/
+      │  │  ├─ PlanAiPanel.tsx
+      │  │  ├─ PlanPage.tsx
+      │  │  └─ PlanSidebar.tsx
+      │  │
+      │  └─ setting/
+      │      └─ SettingPage.tsx
+      │
+      ├─ repositories/
+      │  ├─ doRepository.ts
+      │  ├─ goalRepository.ts
+      │  └─ taskRepository.ts
+      │
+      ├─ routes/
+      │  └─ router.tsx
+      │
+      ├─ service/                   # ユースケース・アプリケーションサービス予定地（今は空）
+      │
+      ├─ styles/
+      │  └─ global.css
+      │
+      └─ types/
+         └─ domain.ts
+  supabase:
+    structure: |
+      supabase/
+      ├─ schema.sql   # テーブル・関数・トリガなどの定義（この YAML の ddl_sql を格納）
+      └─ seed.sql     # 開発用の初期データ
+
+architecture:
+  presentation_layer:
+    responsibility: |
+      画面と見た目。ユーザーに直接見える部分のすべて。
+      pages, components, routes, styles が属する。
+    modules:
+      - src/main.tsx
+      - src/App.tsx
+      - src/routes/router.tsx
+      - src/pages/**
+      - src/components/**
+      - src/styles/**
+  application_layer:
+    responsibility: |
+      画面固有ロジック・ユースケース（アプリケーションサービス）。
+      features の hooks や service/ のユースケース関数で構成される。
+    modules:
+      - src/features/do/hooks/useDoPageData.ts
+      - src/features/plan/hooks/usePlanData.ts
+      - src/features/focus/hooks/useFocusTimer.ts
+      - src/service/** （resetGoalService, completeTaskService などを置く予定地）
+      - 共通 hooks: src/hooks/**
+  infrastructure_layer:
+    responsibility: |
+      DB・API・外部サービスへのアクセス担当。
+      Supabase クライアント、リポジトリ、ドメイン型、Supabase SQL が属する。
+    modules:
+      - src/lib/supabaseClient.ts
+      - src/repositories/*.ts
+      - src/types/domain.ts
+      - src/env.d.ts
+      - supabase/schema.sql
+      - supabase/seed.sql
+
+implementation_status:
+  db:
+    status: "確定・作成済み（Supabase 上に適用済み）"
+    notes: |
+      - 提示された DDL に基づいて、Supabase プロジェクトにテーブル・関数・トリガ・RLS が作成済み。
+      - 追加で monotodo_tasks_after_change の安全パッチを CREATE OR REPLACE で適用済み。
+      - completed_normal_task_count の意味は「これまで完了してきた通常タスクのネット回数」として扱うことで確定。
+  supabase_client:
+    status: "src/lib/supabaseClient.ts として定義済み or 定義予定"
+    notes: |
+      - VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY を env に設定した上で、
+        createClient() を用いて Supabase クライアントを生成する。
+  frontend:
+    status: "アーキ構造とフォルダ構造は確定、実装はこれから"
+    next_steps:
+      - doRepository.ts を実装し、RPC と goals メトリクス取得をつなぐ
+      - useDoPageData フックと DoPage.tsx を実装し、「次のタスク 1 件」UI を完成させる
+      - Plan / Focus / Setting / Login の順に実装を進める
+
+open_questions_and_todos:
+  - id: settings-ui-detail
+    area: Settingページ
+    status: 未確定
+    detail: |
+      - 作業時間 / 休憩時間 / 長休憩時間の UI を、
+        数値入力/スライダーなどどのコンポーネントで実現するか。
+      - 保存タイミング（即時反映か保存ボタン押下か）とバリデーションの仕様。
+  - id: pwa_offline_queue
+    area: PWA・オフライン同期
+    status: 未確定（将来対応）
+    detail: |
+      - どの操作をオフラインキューに入れるか（Plan の追加/編集/削除、完了操作など）。
+      - リトライ戦略（指数バックオフなど）や、上限超過時の扱い。
+      - 仕様としては「オフライン同期でも上限超過が発生しないようにする」としているが、
+        具体的な実装パターンは未確定。
+  - id: ai_prompt_design
+    area: Plan×AI連携
+    status: 未確定（Plan MVP 完成後に詰める）
+    detail: |
+      - Google AI Studio (Gemini) に対してどのようなプロンプト/コンテキストを渡すのか。
+      - サブゴール案 / タスク案の表現形式と、UIへの組み込み方。
+      - 提案の採用/非採用をどうログし、どこまでユーザーに見せるか。
+  - id: circle_progress_visual
+    area: 円形プログレスの見た目
+    status: 未確定（実装時調整）
+    detail: |
+      - react-circular-progressbar の線幅、色、テキスト位置など細部のデザイン。
+      - Do / Focus 両方で共通の <CircleProgress /> ラッパを使うが、
+        具体的なスタイル値はまだ決めきっていない。
+  - id: plan_enter_behavior_subgoal
+    area: PlanページのキーボードUX
+    status: 仕様案あり / 最終確定前
+    detail: |
+      - サブゴールタイトルで Enter を押したときに、
+        「新しい Subgoal を作る」のか「その Subgoal の Task を追加する」のか。
+      - 現時点の要望は「サブゴールで Enter → その Subgoal 配下に新しい Task 行を追加」だが、
+        既存の Task Enter 挙動との一貫性やキーボード操作フローを踏まえて、
+        実装フェーズで最終的に詰める必要がある。
+
+ddl_sql: |
+  -- ==========================================
+  -- MonoToDo DB DDL 完全版
+  -- （Supabase Postgres / Supabase Auth 前提）
+  -- ==========================================
+
+  create extension if not exists "pgcrypto";
+
+  set search_path = public;
+
+  -- ------------------------------------------
+  -- 共通ヘルパー関数
+  -- ------------------------------------------
+
+  -- updated_at を自動更新
+  create or replace function public.monotodo_set_updated_at()
+  returns trigger as $$
+  begin
+    new.updated_at = timezone('utc', now());
+    return new;
+  end;
+  $$ language plpgsql;
+
+  -- 255 文字制約（title 用）
+  create or replace function public.monotodo_check_title_length()
+  returns trigger as $$
+  begin
+    if new.title is not null and char_length(new.title) > 255 then
+      raise exception 'MONOTODO_TITLE_TOO_LONG' using errcode = 'P0001';
+    end if;
+    return new;
+  end;
+  $$ language plpgsql;
+
+  -- ==========================================
+  -- goals：1ユーザー1Goal
+  -- ==========================================
+
+  create table public.goals (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    title text not null default '',
+
+    -- メトリクス冗長保存
+    completed_normal_task_count integer not null default 0,
+    total_completed_loop_task_count integer not null default 0,
+    current_streak integer not null default 0,
+    last_aggregated_date date,
+
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+  );
+
+  create unique index goals_user_id_unique on public.goals(user_id);
+
+  -- 1ユーザー1Goal 強制トリガー
+  create or replace function public.monotodo_enforce_single_goal()
+  returns trigger as $$
+  declare
+    v_existing uuid;
+  begin
+    select id into v_existing
+      from public.goals
+     where user_id = new.user_id;
+
+    if v_existing is not null then
+      raise exception 'MONOTODO_GOAL_EXISTS' using errcode = 'P0001';
+    end if;
+
+    return new;
+  end;
+  $$ language plpgsql;
+
+  create trigger trg_goals_single
+  before insert on public.goals
+  for each row execute function public.monotodo_enforce_single_goal();
+
+  -- タイトル長チェック
+  create trigger trg_goals_title_length
+  before insert or update on public.goals
+  for each row execute function public.monotodo_check_title_length();
+
+  -- updated_at
+  create trigger trg_goals_set_updated_at
+  before update on public.goals
+  for each row execute function public.monotodo_set_updated_at();
+
+  -- Goal 自動生成 RPC 用関数
+  create or replace function public.monotodo_get_or_create_goal_id()
+  returns uuid
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  declare
+    v_user_id uuid := auth.uid();
+    v_goal_id uuid;
+  begin
+    if v_user_id is null then
+      raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+    end if;
+
+    select id into v_goal_id
+      from public.goals
+     where user_id = v_user_id;
+
+    if v_goal_id is not null then
+      return v_goal_id;
+    end if;
+
+    insert into public.goals(user_id)
+    values (v_user_id)
+    returning id into v_goal_id;
+
+    return v_goal_id;
+  end;
+  $$;
+
+  -- ==========================================
+  -- user_settings：Goal リセット対象外
+  -- ==========================================
+
+  create table public.user_settings (
+    user_id uuid primary key references auth.users(id) on delete cascade,
+
+    focus_minutes integer not null default 25,
+    short_break_minutes integer not null default 5,
+    long_break_minutes integer not null default 15,
+    long_break_interval integer not null default 4,
+
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+  );
+
+  create trigger trg_user_settings_set_updated_at
+  before update on public.user_settings
+  for each row execute function public.monotodo_set_updated_at();
+
+  -- ==========================================
+  -- subgoals
+  -- ==========================================
+
+  create table public.subgoals (
+    id uuid primary key default gen_random_uuid(),
+    goal_id uuid not null references public.goals(id) on delete cascade,
+    user_id uuid not null references auth.users(id) on delete cascade,
+
+    title text not null,
+    "order" integer not null default 1,
+    completed boolean not null default false,
+
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+  );
+
+  -- タイトル長チェック
+  create trigger trg_subgoals_title_length
+  before insert or update on public.subgoals
+  for each row execute function public.monotodo_check_title_length();
+
+  -- BEFORE：Goal 継承 + 上限 30 + order 検証
+  create or replace function public.monotodo_subgoals_before_write()
+  returns trigger as $$
+  declare
+    v_goal public.goals%rowtype;
+    v_cnt integer;
+  begin
+    -- goal_id が NULL の場合は Goal 自動生成
+    if new.goal_id is null then
+      new.goal_id := public.monotodo_get_or_create_goal_id();
+    end if;
+
+    select * into v_goal
+      from public.goals
+     where id = new.goal_id;
+
+    if not found then
+      raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+    end if;
+
+    -- user_id を Goal に合わせる
+    new.user_id := v_goal.user_id;
+
+    -- 上限 30（Goal あたり）
+    if tg_op = 'INSERT' then
+      select count(*) into v_cnt
+        from public.subgoals
+       where goal_id = new.goal_id;
+
+      if v_cnt >= 30 then
+        raise exception 'MONOTODO_SUBGOAL_LIMIT_EXCEEDED' using errcode = 'P0001';
+      end if;
+    end if;
+
+    if new."order" is null or new."order" < 1 then
+      raise exception 'MONOTODO_INVALID_ORDER' using errcode = 'P0001';
+    end if;
+
+    return new;
+  end;
+  $$ language plpgsql;
+
+  create trigger trg_subgoals_before
+  before insert or update on public.subgoals
+  for each row execute function public.monotodo_subgoals_before_write();
+
+  -- order 詰め直し
+  create or replace function public.monotodo_normalize_subgoal_order()
+  returns trigger as $$
+  declare
+    v_goal_id uuid := coalesce(new.goal_id, old.goal_id);
+  begin
+    with ranked as (
+      select id,
+             row_number() over (order by "order", created_at, id) as rn
+        from public.subgoals
+       where goal_id = v_goal_id
+    )
+    update public.subgoals s
+       set "order" = r.rn
+      from ranked r
+     where s.id = r.id;
+
+    return new;
+  end;
+  $$ language plpgsql;
+
+  create trigger trg_subgoals_normalize_order
+  after insert or update or delete on public.subgoals
+  for each row execute function public.monotodo_normalize_subgoal_order();
+
+  -- updated_at
+  create trigger trg_subgoals_set_updated_at
+  before update on public.subgoals
+  for each row execute function public.monotodo_set_updated_at();
+
+  -- ==========================================
+  -- tasks
+  -- ==========================================
+
+  create table public.tasks (
+    id uuid primary key default gen_random_uuid(),
+    subgoal_id uuid not null references public.subgoals(id) on delete cascade,
+    user_id uuid not null references auth.users(id) on delete cascade,
+
+    title text not null,
+    is_loop boolean not null default false,
+    completed boolean not null default false,
+
+    "order" integer not null default 1,
+
+    -- 完了時刻（通常もループも最後の完了時刻として利用）
+    completed_at timestamptz,
+
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+  );
+
+  -- タイトル長チェック
+  create trigger trg_tasks_title_length
+  before insert or update on public.tasks
+  for each row execute function public.monotodo_check_title_length();
+
+  -- BEFORE：Subgoal 継承 + 上限 30 + order 検証
+  create or replace function public.monotodo_tasks_before_write()
+  returns trigger as $$
+  declare
+    v_subgoal public.subgoals%rowtype;
+    v_cnt integer;
+  begin
+    select * into v_subgoal
+      from public.subgoals
+     where id = new.subgoal_id;
+
+    if not found then
+      raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+    end if;
+
+    new.user_id := v_subgoal.user_id;
+
+    if tg_op = 'INSERT' then
+      select count(*) into v_cnt
+        from public.tasks
+       where subgoal_id = new.subgoal_id;
+
+      if v_cnt >= 30 then
+        raise exception 'MONOTODO_TASK_LIMIT_EXCEEDED' using errcode = 'P0001';
+      end if;
+    end if;
+
+    if new."order" is null or new."order" < 1 then
+      raise exception 'MONOTODO_INVALID_ORDER' using errcode = 'P0001';
+    end if;
+
+    return new;
+  end;
+  $$ language plpgsql;
+
+  create trigger trg_tasks_before
+  before insert or update on public.tasks
+  for each row execute function public.monotodo_tasks_before_write();
+
+  -- order 詰め直し
+  create or replace function public.monotodo_normalize_task_order()
+  returns trigger as $$
+  declare
+    v_subgoal_id uuid := coalesce(new.subgoal_id, old.subgoal_id);
+  begin
+    with ranked as (
+      select id,
+             row_number() over (order by "order", created_at, id) as rn
+        from public.tasks
+       where subgoal_id = v_subgoal_id
+    )
+    update public.tasks t
+       set "order" = r.rn
+      from ranked r
+     where t.id = r.id;
+
+    return new;
+  end;
+  $$ language plpgsql;
+
+  create trigger trg_tasks_normalize_order
+  after insert or update or delete on public.tasks
+  for each row execute function public.monotodo_normalize_task_order();
+
+  -- updated_at
+  create trigger trg_tasks_set_updated_at
+  before update on public.tasks
+  for each row execute function public.monotodo_set_updated_at();
+
+  -- Subgoal.completed 更新（通常タスクのみ）
+  create or replace function public.monotodo_update_subgoal_completed(p_subgoal_id uuid)
+  returns void
+  language plpgsql
+  as $$
+  declare
+    v_total integer;
+    v_done integer;
+  begin
+    select count(*) into v_total
+      from public.tasks
+     where subgoal_id = p_subgoal_id
+       and is_loop = false;
+
+    if v_total = 0 then
+      update public.subgoals
+         set completed = false
+       where id = p_subgoal_id;
+      return;
+    end if;
+
+    select count(*) into v_done
+      from public.tasks
+     where subgoal_id = p_subgoal_id
+       and is_loop = false
+       and completed = true;
+
+    update public.subgoals
+       set completed = (v_done = v_total)
+     where id = p_subgoal_id;
+  end;
+  $$;
+
+  -- 修正版 monotodo_tasks_after_change（DELETE 安全対応）
+  create or replace function public.monotodo_tasks_after_change()
+  returns trigger as $$
+  begin
+    -- INSERT / UPDATE のとき：新しい subgoal 側を更新
+    if tg_op in ('INSERT','UPDATE') then
+      perform public.monotodo_update_subgoal_completed(new.subgoal_id);
+    end if;
+
+    -- UPDATE で subgoal_id が変わったとき：古い側も更新
+    if tg_op = 'UPDATE' and old.subgoal_id is distinct from new.subgoal_id then
+      perform public.monotodo_update_subgoal_completed(old.subgoal_id);
+
+    -- DELETE のとき：削除された task がぶら下がっていた subgoal を更新
+    elsif tg_op = 'DELETE' then
+      perform public.monotodo_update_subgoal_completed(old.subgoal_id);
+    end if;
+
+    return new;
+  end;
+  $$ language plpgsql;
+
+  create trigger trg_tasks_after_change
+  after insert or update or delete on public.tasks
+  for each row execute function public.monotodo_tasks_after_change();
+
+  -- ==========================================
+  -- task_completion_logs：活動日ログ
+  -- ==========================================
+
+  create table public.task_completion_logs (
+    id bigserial primary key,
+
+    user_id uuid not null references auth.users(id) on delete cascade,
+    goal_id uuid not null references public.goals(id) on delete cascade,
+
+    activity_date date not null,
+
+    had_any_completion boolean not null default false,
+    completed_loop_count integer not null default 0,
+
+    -- その日の「完了中タスク数」（通常＋ループ）の内部カウンタ
+    completion_counter integer not null default 0,
+
+    created_at timestamptz not null default timezone('utc', now())
+  );
+
+  create unique index task_completion_logs_user_goal_date_unique
+    on public.task_completion_logs(user_id, goal_id, activity_date);
+
+  -- ==========================================
+  -- AI ログ
+  -- ==========================================
+
+  create table public.ai_suggestion_sessions (
+    id uuid primary key default gen_random_uuid(),
+
+    user_id uuid not null references auth.users(id) on delete cascade,
+
+    goal_id uuid references public.goals(id) on delete set null,
+
+    prompt text not null,
+    model text,
+    meta jsonb not null default '{}'::jsonb,
+
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+  );
+
+  create trigger trg_ai_sessions_set_updated_at
+  before update on public.ai_suggestion_sessions
+  for each row execute function public.monotodo_set_updated_at();
+
+  create table public.ai_suggestion_items (
+    id uuid primary key default gen_random_uuid(),
+
+    session_id uuid not null
+      references public.ai_suggestion_sessions(id) on delete cascade,
+
+    content text not null,
+    accepted boolean not null default false,
+
+    -- FK は後で ALTER で追加する
+    adopted_subgoal_id uuid,
+    adopted_task_id uuid,
+
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+  );
+
+  create trigger trg_ai_items_set_updated_at
+  before update on public.ai_suggestion_items
+  for each row execute function public.monotodo_set_updated_at();
+
+  -- subgoals / tasks が定義されたあとで外部キーを追加
+  alter table public.ai_suggestion_items
+    add constraint ai_items_subgoal_fk
+    foreign key (adopted_subgoal_id)
+    references public.subgoals(id)
+    on delete set null;
+
+  alter table public.ai_suggestion_items
+    add constraint ai_items_task_fk
+    foreign key (adopted_task_id)
+    references public.tasks(id)
+    on delete set null;
+
+  -- ==========================================
+  -- RPC：次タスク取得（副作用なし）
+  -- ==========================================
+
+  create or replace function public.monotodo_select_next_task()
+  returns table(
+    task_id uuid,
+    task_title text,
+    is_loop boolean,
+    subgoal_id uuid,
+    subgoal_title text,
+    subgoal_order integer,
+    task_order integer,
+    subgoal_progress_percent integer
+  )
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  declare
+    v_user_id uuid := auth.uid();
+  begin
+    if v_user_id is null then
+      raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+    end if;
+
+    return query
+    with cg as (
+      select id
+        from public.goals
+       where user_id = v_user_id
+    ),
+    candidate as (
+      select
+        t.id as task_id,
+        t.title as task_title,
+        t.is_loop,
+        t."order" as task_order,
+        t.created_at as task_created_at,
+        s.id as subgoal_id,
+        s.title as subgoal_title,
+        s."order" as subgoal_order,
+        s.created_at as subgoal_created_at
+      from public.tasks t
+      join public.subgoals s on s.id = t.subgoal_id
+      join cg on cg.id = s.goal_id
+      where t.completed = false
+    ),
+    with_progress as (
+      select
+        c.*,
+        (
+          select
+            case
+              when count(*) filter (where t2.is_loop = false) = 0 then 0
+              else floor(
+                100.0
+                * count(*) filter (where t2.is_loop = false and t2.completed = true)
+                / nullif(count(*) filter (where t2.is_loop = false), 0)
+              )::int
+            end
+          from public.tasks t2
+          where t2.subgoal_id = c.subgoal_id
+        ) as subgoal_progress_percent
+      from candidate c
+    )
+    select
+      task_id,
+      task_title,
+      is_loop,
+      subgoal_id,
+      subgoal_title,
+      subgoal_order,
+      task_order,
+      coalesce(subgoal_progress_percent, 0) as subgoal_progress_percent
+    from with_progress
+    order by subgoal_order asc,
+             subgoal_created_at asc,
+             task_order asc,
+             task_created_at asc
+    limit 1;
+  end;
+  $$;
+
+  -- ==========================================
+  -- RPC：タスク完了/解除（logs + メトリクス更新）
+  -- ==========================================
+
+  create or replace function public.monotodo_complete_task(
+    p_task_id uuid,
+    p_completed boolean
+  )
+  returns void
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  declare
+    v_user_id uuid := auth.uid();
+    v_task record;
+    v_goal_id uuid;
+    v_today date := current_date;
+    v_log public.task_completion_logs%rowtype;
+    v_delta integer;
+  begin
+    if v_user_id is null then
+      raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+    end if;
+
+    select t.*, s.goal_id, g.user_id as goal_user_id
+    into v_task
+    from public.tasks t
+    join public.subgoals s on s.id = t.subgoal_id
+    join public.goals g on g.id = s.goal_id
+    where t.id = p_task_id;
+
+    if not found or v_task.goal_user_id <> v_user_id then
+      raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+    end if;
+
+    v_goal_id := v_task.goal_id;
+
+    -- 状態変化がなければ何もしない
+    if v_task.completed = p_completed then
+      return;
+    end if;
+
+    -- tasks 更新
+    if p_completed then
+      update public.tasks
+         set completed = true,
+             completed_at = timezone('utc', now()),
+             updated_at = timezone('utc', now())
+       where id = p_task_id;
+    else
+      update public.tasks
+         set completed = false,
+             completed_at = null,
+             updated_at = timezone('utc', now())
+       where id = p_task_id;
+    end if;
+
+    -- 通常タスクの完了数（現在値）を即時更新
+    if not v_task.is_loop then
+      update public.goals
+         set completed_normal_task_count =
+               completed_normal_task_count + (case when p_completed then 1 else -1 end)
+       where id = v_goal_id;
+    end if;
+
+    -- 今日のログ行を確保
+    insert into public.task_completion_logs(user_id, goal_id, activity_date)
+    values (v_user_id, v_goal_id, v_today)
+    on conflict (user_id, goal_id, activity_date) do nothing;
+
+    select *
+      into v_log
+      from public.task_completion_logs
+     where user_id = v_user_id
+       and goal_id = v_goal_id
+       and activity_date = v_today
+     for update;
+
+    -- completion_counter 更新（通常＋ループ共通）
+    if p_completed then
+      v_delta := 1;
+    else
+      v_delta := -1;
+    end if;
+
+    v_log.completion_counter := greatest(0, v_log.completion_counter + v_delta);
+
+    -- ループタスクのその日分カウント
+    if v_task.is_loop then
+      if p_completed then
+        v_log.completed_loop_count := v_log.completed_loop_count + 1;
+      else
+        v_log.completed_loop_count := greatest(0, v_log.completed_loop_count - 1);
+      end if;
+    end if;
+
+    v_log.had_any_completion := (v_log.completion_counter > 0);
+
+    update public.task_completion_logs
+       set completion_counter = v_log.completion_counter,
+           completed_loop_count = v_log.completed_loop_count,
+           had_any_completion = v_log.had_any_completion
+     where id = v_log.id;
+  end;
+  $$;
+
+  -- ==========================================
+  -- RPC：未集計日をまとめて集計（U7／streak 用）
+  -- ==========================================
+
+  create or replace function public.monotodo_aggregate_missing_days()
+  returns table(
+    streak_changed boolean,
+    metrics_changed boolean
+  )
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  declare
+    v_user_id uuid := auth.uid();
+    v_goal public.goals%rowtype;
+    v_today date := current_date;
+    v_target_end_date date;
+    v_from_date date;
+    v_d date;
+    v_log record;
+    v_streak_before integer;
+    v_loop_before integer;
+    v_streak_after integer;
+    v_loop_after integer;
+    v_streak_changed boolean := false;
+    v_any_changed boolean := false;
+  begin
+    if v_user_id is null then
+      raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+    end if;
+
+    select * into v_goal
+      from public.goals
+     where user_id = v_user_id;
+
+    if not found then
+      streak_changed := false;
+      metrics_changed := false;
+      return;
+    end if;
+
+    -- 今日の分はまだ最終状態が確定していないので「昨日まで」を集計対象に
+    v_target_end_date := v_today - 1;
+
+    if v_target_end_date <= coalesce(v_goal.last_aggregated_date, date '0001-01-01') then
+      streak_changed := false;
+      metrics_changed := false;
+      return;
+    end if;
+
+    -- 開始日
+    if v_goal.last_aggregated_date is null then
+      select min(activity_date)
+        into v_from_date
+        from public.task_completion_logs
+       where user_id = v_user_id
+         and goal_id = v_goal.id
+         and activity_date <= v_target_end_date;
+
+      if v_from_date is null then
+        -- まだログ自体が無い場合：日付だけ進める
+        update public.goals
+           set last_aggregated_date = v_target_end_date,
+               updated_at = timezone('utc', now())
+         where id = v_goal.id;
+
+        streak_changed := false;
+        metrics_changed := false;
+        return;
+      end if;
+    else
+      v_from_date := v_goal.last_aggregated_date + 1;
+    end if;
+
+    if v_from_date > v_target_end_date then
+      streak_changed := false;
+      metrics_changed := false;
+      return;
+    end if;
+
+    v_streak_before := v_goal.current_streak;
+    v_loop_before := v_goal.total_completed_loop_task_count;
+
+    v_streak_after := v_goal.current_streak;
+    v_loop_after := v_goal.total_completed_loop_task_count;
+
+    v_d := v_from_date;
+    while v_d <= v_target_end_date loop
+      select had_any_completion, completed_loop_count
+        into v_log
+        from public.task_completion_logs
+       where user_id = v_user_id
+         and goal_id = v_goal.id
+         and activity_date = v_d;
+
+      if not found then
+        -- 活動なし → streak が途切れる
+        v_streak_after := 0;
+      else
+        if v_log.had_any_completion then
+          v_streak_after := v_streak_after + 1;
+        else
+          v_streak_after := 0;
+        end if;
+
+        v_loop_after := v_loop_after + coalesce(v_log.completed_loop_count, 0);
+      end if;
+
+      v_d := v_d + 1;
+    end loop;
+
+    update public.goals
+       set current_streak = v_streak_after,
+           total_completed_loop_task_count = v_loop_after,
+           last_aggregated_date = v_target_end_date,
+           updated_at = timezone('utc', now())
+     where id = v_goal.id;
+
+    v_streak_changed := (v_streak_before <> v_streak_after);
+    v_any_changed := v_streak_changed or (v_loop_before <> v_loop_after);
+
+    -- 日跨ぎ時のループタスク自動リセット（metrics は減らさない）
+    update public.tasks
+       set completed = false,
+           completed_at = null,
+           updated_at = timezone('utc', now())
+     where user_id = v_user_id
+       and is_loop = true
+       and completed = true;
+
+    streak_changed := v_streak_changed;
+    metrics_changed := v_any_changed;
+
+    return;
+  end;
+  $$;
+
+  -- ==========================================
+  -- RPC：Goal リセット（Goal 配下を全部削除）
+  -- ==========================================
+
+  create or replace function public.monotodo_reset_goal()
+  returns void
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  declare
+    v_user_id uuid := auth.uid();
+    v_goal_id uuid;
+  begin
+    if v_user_id is null then
+      raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+    end if;
+
+    select id into v_goal_id
+      from public.goals
+     where user_id = v_user_id;
+
+    if not found then
+      return;
+    end if;
+
+    -- FK の on delete cascade で subgoals / tasks / logs も全部消える
+    delete from public.goals
+     where id = v_goal_id;
+  end;
+  $$;
+
+  -- ==========================================
+  -- RLS（Row Level Security）
+  -- ==========================================
+
+  -- goals
+  alter table public.goals enable row level security;
+
+  create policy goals_select_own
+    on public.goals for select
+    using (auth.uid() = user_id);
+
+  create policy goals_insert_own
+    on public.goals for insert
+    with check (auth.uid() = user_id);
+
+  create policy goals_update_own
+    on public.goals for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+  create policy goals_delete_own
+    on public.goals for delete
+    using (auth.uid() = user_id);
+
+  -- subgoals
+  alter table public.subgoals enable row level security;
+
+  create policy subgoals_select_own
+    on public.subgoals for select
+    using (auth.uid() = user_id);
+
+  create policy subgoals_insert_own
+    on public.subgoals for insert
+    with check (auth.uid() = user_id);
+
+  create policy subgoals_update_own
+    on public.subgoals for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+  create policy subgoals_delete_own
+    on public.subgoals for delete
+    using (auth.uid() = user_id);
+
+  -- tasks
+  alter table public.tasks enable row level security;
+
+  create policy tasks_select_own
+    on public.tasks for select
+    using (auth.uid() = user_id);
+
+  create policy tasks_insert_own
+    on public.tasks for insert
+    with check (auth.uid() = user_id);
+
+  create policy tasks_update_own
+    on public.tasks for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+  create policy tasks_delete_own
+    on public.tasks for delete
+    using (auth.uid() = user_id);
+
+  -- task_completion_logs
+  alter table public.task_completion_logs enable row level security;
+
+  create policy logs_select_own
+    on public.task_completion_logs for select
+    using (auth.uid() = user_id);
+
+  create policy logs_insert_own
+    on public.task_completion_logs for insert
+    with check (auth.uid() = user_id);
+
+  create policy logs_update_own
+    on public.task_completion_logs for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+  create policy logs_delete_own
+    on public.task_completion_logs for delete
+    using (auth.uid() = user_id);
+
+  -- user_settings
+  alter table public.user_settings enable row level security;
+
+  create policy user_settings_all_own
+    on public.user_settings for all
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+  -- ai_suggestion_sessions
+  alter table public.ai_suggestion_sessions enable row level security;
+
+  create policy ai_sessions_select_own
+    on public.ai_suggestion_sessions for select
+    using (auth.uid() = user_id);
+
+  create policy ai_sessions_insert_own
+    on public.ai_suggestion_sessions for insert
+    with check (auth.uid() = user_id);
+
+  create policy ai_sessions_update_own
+    on public.ai_suggestion_sessions for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+  create policy ai_sessions_delete_own
+    on public.ai_suggestion_sessions for delete
+    using (auth.uid() = user_id);
+
+  -- ai_suggestion_items
+  alter table public.ai_suggestion_items enable row level security;
+
+  create policy ai_items_select_own
+    on public.ai_suggestion_items for select
+    using (
+      exists (
+        select 1
+          from public.ai_suggestion_sessions s
+         where s.id = session_id
+           and s.user_id = auth.uid()
+      )
+    );
+
+  create policy ai_items_all_own
+    on public.ai_suggestion_items for all
+    using (
+      exists (
+        select 1
+          from public.ai_suggestion_sessions s
+         where s.id = session_id
+           and s.user_id = auth.uid()
+      )
+    )
+    with check (
+      exists (
+        select 1
+          from public.ai_suggestion_sessions s
+         where s.id = session_id
+           and s.user_id = auth.uid()
+      )
+    );
