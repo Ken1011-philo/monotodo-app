@@ -1,268 +1,389 @@
 // src/pages/do/DoPage.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
-
 import { useDoPageData } from "../../features/do/hooks/useDoPageData";
 import type { DoRepo, Task, TodayStats } from "../../types/domain";
 
 /* =========================================================
  * 開発用 in-memory リポジトリ
- * - Task/TodayStats の形は domain.ts に合わせる
- * - 初期状態ではタスク 0 件
- * - window.__seedDoTasks([...]) でテストデータを投入
  * =======================================================*/
 const inMemoryRepo: DoRepo = (() => {
-  let tasks: Task[] = []; // 初期は空
+  let tasks: Task[] = [];
 
   const getNextTask = async () => {
-    // まだ完了していないタスク（status: "pending"）だけを対象にする
     const pending = tasks.filter((t) => t.status === "pending");
-
-    // 並び順は order の小さいものを優先（仕様に合わせてここは調整してOK）
     pending.sort((a, b) => a.order - b.order);
-
     return pending[0] ?? null;
   };
 
-  const getTodayStats = async () => {
+  const getTodayStats = async (): Promise<TodayStats> => {
     const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(
-      (t) => t.status === "completed"
-    ).length;
+    const completedTasks = tasks.filter((t) => t.status === "completed").length;
+    return { totalTasks, completedTasks };
+  };
 
-    const stats: TodayStats = {
-      totalTasks,
-      completedTasks,
+  if (typeof window !== "undefined") {
+    // @ts-expect-error dev helper
+    window.__seedDoTasks = (seed: Task[]) => {
+      tasks = [...seed];
+      console.log("[Do/dev] seeded tasks:", tasks);
     };
+  }
 
-    return stats;
+  return {
+    getNextTask,
+    getTodayStats,
   };
-
-  // --- 開発用ヘルパ ---
-  // ブラウザコンソールからタスクを差し込めるようにする
-  // 例:
-  // window.__seedDoTasks([
-  //   {
-  //     id: "1",
-  //     goalId: "g1",
-  //     subgoalId: "s1",
-  //     title: "テストタスク",
-  //     order: 1,
-  //     status: "pending",
-  //     createdAt: new Date().toISOString(),
-  //     updatedAt: new Date().toISOString(),
-  //   },
-  // ])
-  // @ts-expect-error dev helper
-  window.__seedDoTasks = (seed: Task[]) => {
-    tasks = [...seed];
-  };
-
-  return { getNextTask, getTodayStats };
 })();
 
-/* =========================
- *  共通 UI コンポーネント
- * =======================*/
+/* =========================================================
+ * メインコンポーネント
+ * =======================================================*/
 
-const Skeleton: React.FC<{ className?: string }> = ({ className }) => (
-  <div className={["skel", className].filter(Boolean).join(" ")} />
-);
+export const DoPage: React.FC = () => {
+  const navigate = useNavigate();
 
-const ProgressBar: React.FC<{ value: number }> = ({ value }) => (
-  <div className="progress__track">
-    <div
-      className="progress__fill"
-      style={{ width: `${Math.round(value * 100)}%` }}
-    />
-  </div>
-);
+  // ★ 型は useDoPageData 側に任せる（キャストしない）
+  const { state, reload } = useDoPageData(inMemoryRepo);
 
-const PageShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="page">
-    <main className="main">{children}</main>
-  </div>
-);
+  if (state.status === "loading") {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-background">
+        <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+          <NowCardSkeleton />
+          <TodayCardSkeleton />
+        </main>
+      </div>
+    );
+  }
 
-/* =========================
- *  Now Task カード
- * =======================*/
+  if (state.status === "error") {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-background">
+        <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+          <ErrorCard
+            message={state.error ?? "タスク情報の取得に失敗しました。"}
+            onRetry={reload}
+          />
+        </main>
+      </div>
+    );
+  }
 
-type NowTaskCardProps = {
+  // ここに来る時点で status === "ready" 想定
+  const task = state.task;
+  const stats = state.stats; // ★ todayStats ではなく stats
+
+  const handleStart = () => {
+    if (!task) return;
+    navigate(`/focus?taskId=${encodeURIComponent(task.id)}`);
+  };
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-background">
+      <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+        {task ? <NowCard task={task} onStart={handleStart} /> : <EmptyNowCard />}
+        {stats && <TodayCard stats={stats} />}
+      </main>
+    </div>
+  );
+};
+
+/* =========================================================
+ * 「今やるタスク」カード
+ * =======================================================*/
+
+interface NowCardProps {
   task: Task;
   onStart: () => void;
-};
+}
 
-const NowTaskCard: React.FC<NowTaskCardProps> = ({ task, onStart }) => {
-  // domain.ts に合わせて、進捗は status から計算するだけにする
+const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
   const isCompleted = task.status === "completed";
-  const progress = isCompleted ? 1 : 0;
-  const valueText = isCompleted ? "完了" : "未完了";
+  const progress = isCompleted ? 100 : 0;
 
   return (
-    <section className="nowcard container">
-      <div className="nowcard__inner">
-        <h2 className="nowcard__title">{task.title}</h2>
+    <section
+      className="
+        rounded-2xl border border-border
+        bg-card/90
+        shadow-[0_18px_45px_rgba(0,0,0,0.18)]
+      "
+    >
+      <div className="px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
+        <h2 className="mb-2 text-[1.35rem] font-semibold text-card-foreground">
+          今やるタスク
+        </h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          いま集中するタスクはこれだけです。
+        </p>
 
-        <p className="nowcard__subtitle">今日の進捗</p>
-        <div className="nowcard__progress">
-          <ProgressBar value={progress} />
-          <span className="progress__value">{valueText}</span>
+        <div className="mb-3">
+          <p className="mb-1 text-sm font-medium text-card-foreground">タスク名</p>
+          <p className="text-base text-card-foreground">{task.title}</p>
         </div>
 
-        <div className="nowcard__buttons">
-          <button className="btn btn--lg" onClick={onStart}>
-            タスク開始
-          </button>
-          {/* バックエンド未実装なので一旦 disabled。将来 DoRepo にメソッド追加 */}
-          <button className="btn btn--md" disabled>
-            タスク終了
-          </button>
-          <button className="btn btn--md" disabled>
-            気が散った
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const NowTaskCardSkeleton: React.FC = () => (
-  <section className="nowcard container">
-    <div className="nowcard__inner">
-      <Skeleton className="nowcard__title" />
-      <Skeleton className="nowcard__subtitle" />
-      <div className="nowcard__progress">
-        <div className="progress__track">
-          <div className="progress__fill" />
-        </div>
-        <Skeleton className="progress__value" />
-      </div>
-      <div className="nowcard__buttons">
-        <Skeleton className="btn--lg" />
-        <Skeleton className="btn--md" />
-        <Skeleton className="btn--md" />
-      </div>
-    </div>
-  </section>
-);
-
-/* =========================
- *  今日の記録
- * =======================*/
-
-const TodayStatsView: React.FC<{ stats: TodayStats }> = ({ stats }) => {
-  const { totalTasks, completedTasks } = stats;
-  const completionRate =
-    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-  return (
-    <section className="today container">
-      <h2 className="today__heading">今日の記録</h2>
-      <div className="today__grid">
-        <div className="today__item">
-          <span className="today__value">
-            完了 {completedTasks} / {totalTasks}
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex-1 overflow-hidden rounded-full bg-muted h-2">
+            <div
+              className="
+                h-full rounded-full bg-primary
+                transition-[width] duration-150 ease-out
+              "
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {isCompleted ? "完了" : "未完了"}
           </span>
         </div>
-        <div className="today__item">
-          <span className="today__value">完了率 {completionRate}%</span>
+
+        <div
+          className="
+            mt-1 flex flex-wrap gap-2.5
+            sm:flex-row sm:items-center
+            flex-col
+          "
+        >
+          <button
+            type="button"
+            onClick={onStart}
+            className="
+              inline-flex items-center justify-center
+              rounded-full
+              bg-primary px-4 py-2
+              text-sm font-medium text-primary-foreground
+              shadow-sm
+              hover:bg-primary/90
+              focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-primary focus-visible:ring-offset-2
+              disabled:pointer-events-none disabled:opacity-60
+              w-full sm:w-auto
+            "
+          >
+            タスク開始
+          </button>
+
+          <button
+            type="button"
+            disabled
+            className="
+              inline-flex items-center justify-center
+              rounded-full
+              border border-border
+              bg-background px-4 py-2
+              text-sm font-medium text-foreground
+              shadow-sm
+              hover:bg-muted
+              focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-primary focus-visible:ring-offset-2
+              disabled:pointer-events-none disabled:opacity-60
+              w-full sm:w-auto
+            "
+          >
+            タスク終了（未実装）
+          </button>
+
+          <button
+            type="button"
+            disabled
+            className="
+              inline-flex items-center justify-center
+              rounded-full
+              border border-border
+              bg-background px-4 py-2
+              text-sm font-medium text-foreground
+              shadow-sm
+              hover:bg-muted
+              focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-primary focus-visible:ring-offset-2
+              disabled:pointer-events-none disabled:opacity-60
+              w-full sm:w-auto
+            "
+          >
+            気が散った（未実装）
+          </button>
         </div>
       </div>
     </section>
   );
 };
 
-const TodayStatsSkeleton: React.FC = () => (
-  <section className="today container">
-    <h2 className="today__heading">今日の記録</h2>
-    <div className="today__grid">
-      <div className="today__item">
-        <Skeleton className="today__value" />
-      </div>
-      <div className="today__item">
-        <Skeleton className="today__value" />
-      </div>
-    </div>
-  </section>
-);
+/* =========================================================
+ * タスクが無いときのカード
+ * =======================================================*/
 
-/* =========================
- *  空状態（タスクが無いとき）
- * =======================*/
-
-const EmptyNowTaskCard: React.FC = () => (
-  <section className="nowcard container">
-    <div className="nowcard__inner">
-      <h2 className="nowcard__title">今日は「今やる」タスクがありません</h2>
-      <p className="nowcard__subtitle">
-        Planページで今日やるタスクを決めてから、またここに戻ってきてください。
+const EmptyNowCard: React.FC = () => (
+  <section
+    className="
+      rounded-2xl border border-border
+      bg-card/90
+      shadow-[0_18px_45px_rgba(0,0,0,0.18)]
+    "
+  >
+    <div className="px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
+      <h2 className="mb-2 text-[1.35rem] font-semibold text-card-foreground">
+        今やるタスクはありません
+      </h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        今日やるタスクは Plan ページで決めてください。
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Plan で「今日やる」を設定すると、ここに 1 件だけ表示されます。
       </p>
     </div>
   </section>
 );
 
-/* =========================
- *  ページ本体
- * =======================*/
+/* =========================================================
+ * 今日の記録カード
+ * =======================================================*/
 
-const DoPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { state, reload } = useDoPageData(inMemoryRepo);
+interface TodayCardProps {
+  stats: TodayStats;
+}
 
-  const isReady = state.status === "ready";
-  const task = isReady ? state.task : null;
-  const stats = isReady ? state.stats : null;
+const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
+  const { totalTasks, completedTasks } = stats;
+  const rate =
+    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   return (
-    <PageShell>
-      {/* ローディング中 */}
-      {state.status === "loading" && (
-        <>
-          <NowTaskCardSkeleton />
-          <TodayStatsSkeleton />
-        </>
-      )}
+    <section
+      className="
+        rounded-2xl border border-border
+        bg-card/95
+        px-6 py-5
+      "
+    >
+      <h2 className="mb-3 text-[1.05rem] font-semibold text-card-foreground">
+        今日の記録
+      </h2>
 
-      {/* エラー時 */}
-      {state.status === "error" && (
-        <>
-          <section className="nowcard container">
-            <div className="nowcard__inner">
-              <h2 className="nowcard__title">
-                データの読み込みに失敗しました
-              </h2>
-              <p className="nowcard__subtitle">
-                ネットワーク状況を確認して、もう一度お試しください。
-              </p>
-              <div className="nowcard__buttons">
-                <button className="btn btn--lg" onClick={reload}>
-                  再試行
-                </button>
-              </div>
-            </div>
-          </section>
-          <TodayStatsSkeleton />
-        </>
-      )}
+      <div
+        className="
+          grid grid-cols-1 gap-2.5
+          sm:grid-cols-2
+          lg:grid-cols-3
+        "
+      >
+        <div className="rounded-md bg-muted px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">今日のタスク数</p>
+          <p className="text-sm font-medium text-card-foreground">
+            {totalTasks} 件
+          </p>
+        </div>
 
-      {/* 正常系 */}
-      {isReady && (
-        <>
-          {task ? (
-            <NowTaskCard
-              task={task}
-              onStart={() => navigate(`/focus?taskId=${task.id}`)}
-            />
-          ) : (
-            <EmptyNowTaskCard />
-          )}
+        <div className="rounded-md bg-muted px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">完了したタスク</p>
+          <p className="text-sm font-medium text-card-foreground">
+            {completedTasks} 件
+          </p>
+        </div>
 
-          {stats ? <TodayStatsView stats={stats} /> : <TodayStatsSkeleton />}
-        </>
-      )}
-    </PageShell>
+        <div className="rounded-md bg-muted px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">完了率</p>
+          <p className="text-sm font-medium text-card-foreground">{rate} %</p>
+        </div>
+      </div>
+    </section>
   );
 };
+
+/* =========================================================
+ * ローディング用スケルトン
+ * =======================================================*/
+
+const NowCardSkeleton: React.FC = () => (
+  <section
+    className="
+      rounded-2xl border border-border
+      bg-card/90
+      shadow-[0_18px_45px_rgba(0,0,0,0.18)]
+      animate-pulse
+    "
+  >
+    <div className="space-y-3 px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
+      <div className="h-4 w-1/3 rounded-full bg-muted" />
+      <div className="h-3 w-1/2 rounded-full bg-muted" />
+      <div className="mt-3 h-2 w-full rounded-full bg-muted" />
+      <div className="flex flex-wrap gap-2.5 pt-2">
+        <div className="h-9 w-28 rounded-full bg-muted" />
+        <div className="h-9 w-28 rounded-full bg-muted" />
+        <div className="h-9 w-28 rounded-full bg-muted" />
+      </div>
+    </div>
+  </section>
+);
+
+const TodayCardSkeleton: React.FC = () => (
+  <section
+    className="
+      rounded-2xl border border-border
+      bg-card/95
+      px-6 py-5
+      animate-pulse
+    "
+  >
+    <div className="mb-3 h-4 w-32 rounded-full bg-muted" />
+    <div
+      className="
+        grid grid-cols-1 gap-2.5
+        sm:grid-cols-2
+        lg:grid-cols-3
+      "
+    >
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="space-y-2 rounded-md bg-muted px-3 py-2.5"
+        >
+          <div className="h-3 w-1/2 rounded-full bg-background/60" />
+          <div className="h-4 w-1/3 rounded-full bg-background/60" />
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
+/* =========================================================
+ * エラー表示カード
+ * =======================================================*/
+
+interface ErrorCardProps {
+  message: string;
+  onRetry: () => void;
+}
+
+const ErrorCard: React.FC<ErrorCardProps> = ({ message, onRetry }) => (
+  <section
+    className="
+      rounded-2xl border border-destructive/40
+      bg-destructive/10
+      px-6 py-5
+    "
+  >
+    <h2 className="mb-2 text-[1.05rem] font-semibold text-destructive">
+      読み込みエラー
+    </h2>
+    <p className="mb-4 text-sm text-destructive">{message}</p>
+    <button
+      type="button"
+      onClick={onRetry}
+      className="
+        inline-flex items-center justify-center
+        rounded-full
+        bg-destructive px-4 py-2
+        text-sm font-medium text-destructive-foreground
+        shadow-sm
+        hover:bg-destructive/90
+        focus-visible:outline-none focus-visible:ring-2
+        focus-visible:ring-destructive focus-visible:ring-offset-2
+      "
+    >
+      もう一度読み込む
+    </button>
+  </section>
+);
 
 export default DoPage;
