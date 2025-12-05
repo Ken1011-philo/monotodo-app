@@ -89,6 +89,7 @@ export const DoPage: React.FC = () => {
   );
 };
 
+
 /* =========================================================
  * 「今やるタスク」カード
  * =======================================================*/
@@ -119,7 +120,9 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
         </p>
 
         <div className="mb-3">
-          <p className="mb-1 text-sm font-medium text-card-foreground">タスク名</p>
+          <p className="mb-1 text-sm font-medium text-card-foreground">
+            タスク名
+          </p>
           <p className="text-base text-card-foreground">{task.title}</p>
         </div>
 
@@ -138,13 +141,8 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
           </span>
         </div>
 
-        <div
-          className="
-            mt-1 flex flex-wrap gap-2.5
-            sm:flex-row sm:items-center
-            flex-col
-          "
-        >
+        {/* 仕様上必要なのは「開始」だけなので、このボタンだけ残す */}
+        <div className="mt-1 flex flex-wrap gap-2.5 sm:flex-row sm:items-center">
           <button
             type="button"
             onClick={onStart}
@@ -163,51 +161,12 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
           >
             タスク開始
           </button>
-
-          <button
-            type="button"
-            disabled
-            className="
-              inline-flex items-center justify-center
-              rounded-full
-              border border-border
-              bg-background px-4 py-2
-              text-sm font-medium text-foreground
-              shadow-sm
-              hover:bg-muted
-              focus-visible:outline-none focus-visible:ring-2
-              focus-visible:ring-primary focus-visible:ring-offset-2
-              disabled:pointer-events-none disabled:opacity-60
-              w-full sm:w-auto
-            "
-          >
-            タスク終了（未実装）
-          </button>
-
-          <button
-            type="button"
-            disabled
-            className="
-              inline-flex items-center justify-center
-              rounded-full
-              border border-border
-              bg-background px-4 py-2
-              text-sm font-medium text-foreground
-              shadow-sm
-              hover:bg-muted
-              focus-visible:outline-none focus-visible:ring-2
-              focus-visible:ring-primary focus-visible:ring-offset-2
-              disabled:pointer-events-none disabled:opacity-60
-              w-full sm:w-auto
-            "
-          >
-            気が散った（未実装）
-          </button>
         </div>
       </div>
     </section>
   );
 };
+
 
 /* =========================================================
  * タスクが無いときのカード
@@ -238,7 +197,6 @@ const EmptyNowCard: React.FC = () => (
 /* =========================================================
  * 今日の記録カード
  * =======================================================*/
-
 interface TodayCardProps {
   stats: TodayStats;
 }
@@ -268,27 +226,28 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
         "
       >
         <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">今日のタスク数</p>
+          <p className="text-xs text-muted-foreground">今日のサブゴール数</p>
           <p className="text-sm font-medium text-card-foreground">
-            {totalTasks} 件
+            {totalTasks} 個
           </p>
         </div>
 
         <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">完了したタスク</p>
+          <p className="text-xs text-muted-foreground">完了したサブゴール</p>
           <p className="text-sm font-medium text-card-foreground">
-            {completedTasks} 件
+            {completedTasks} 個
           </p>
         </div>
 
         <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">完了率</p>
+          <p className="text-xs text-muted-foreground">サブゴール完了率</p>
           <p className="text-sm font-medium text-card-foreground">{rate} %</p>
         </div>
       </div>
     </section>
   );
 };
+
 
 /* =========================================================
  * ローディング用スケルトン
