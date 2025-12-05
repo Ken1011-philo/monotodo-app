@@ -10,7 +10,7 @@ import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 // - 終了（確認ダイアログ -> 完了処理のプレースホルダ）
 // - Focus 中はナビ非表示（body にクラス追加）
 // - Back 操作やブラウザ離脱を抑制
-// - Do へ戻るは '/do' へ navigate（必要に応じて変更）
+// - Do へ戻るは '/do' へ遷移（必要に応じて変更）
 
 export default function FocusPage() {
   const navigate = useNavigate();
