@@ -226,7 +226,7 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
         "
       >
         <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">今日のサブゴール数</p>
+          <p className="text-xs text-muted-foreground">今日のタクス</p>
           <p className="text-sm font-medium text-card-foreground">
             {totalTasks} 個
           </p>
