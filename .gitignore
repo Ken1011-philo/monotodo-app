@@ -23,5 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 
-
+project_monotodo_context.yaml
 /.env
