@@ -5,6 +5,11 @@ export type TaskStatus = "pending" | "completed";
 export interface Goal {
   id: UUID;
   title: string;
+  // 統計情報
+  currentStreak: number;
+  completedNormalTaskCount: number;
+  totalCompletedLoopTaskCount: number;
+  // 統計情報ここまで
   createdAt: string;
   updatedAt: string;
 }
