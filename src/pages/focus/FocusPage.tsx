@@ -190,11 +190,11 @@ export default function FocusPage() {
             value={percent}
             text={formatTime(time)}
             strokeWidth={6}
+            className="focus-progress"
             styles={buildStyles({
-              textColor: "var(--foreground, #fff)",
+              textColor: "rgb(255, 255, 255)",
               pathColor: "var(--background, #fff)",
               trailColor: "rgba(255,255,255,0.12)",
-              textSize: "28px",
             })}
           />
         </div>
