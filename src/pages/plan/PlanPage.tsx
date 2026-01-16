@@ -26,28 +26,21 @@ type Subgoal = {
 const seededSubgoals: Subgoal[] = [
   {
     id: "seed-research",
-    title: "リサーチ方針を固める",
+    title: "",
     createdAt: 1,
     tasks: [
-      { id: "seed-research-1", title: "既存アプリ調査", isLoop: false, createdAt: 1 },
-      { id: "seed-research-2", title: "競合のPlan導線をスクショ", isLoop: true, createdAt: 2 },
-    ],
-  },
-  {
-    id: "seed-plan",
-    title: "週次ブロックの洗い出し",
-    createdAt: 2,
-    tasks: [
-      { id: "seed-plan-1", title: "月〜金の時間割を整理", isLoop: false, createdAt: 1 },
-      { id: "seed-plan-2", title: "リピート化したい家事を列挙", isLoop: true, createdAt: 2 },
-    ],
-  },
-  {
-    id: "seed-scope",
-    title: "対象タスクの粒度を決める",
-    createdAt: 3,
-    tasks: [
-      { id: "seed-scope-1", title: "通常タスクの粒度ルールをメモ", isLoop: false, createdAt: 1 },
+      {
+        id: "seed-research-1",
+        title: "",
+        isLoop: false,
+        createdAt: 1,
+      },
+      {
+        id: "seed-research-2",
+        title: "",
+        isLoop: false,
+        createdAt: 2,
+      },
     ],
   },
 ];
@@ -63,10 +56,14 @@ export default function PlanPage() {
   return (
     <section className="space-y-8 rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
       <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Plan</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+          Plan
+        </p>
         <h1 className="text-3xl font-semibold">Goal / Subgoal 設計</h1>
         <p className="text-sm text-muted-foreground">
-          Supabase 連携前に、Plan ページの入力体験を整備しています。ここで確定した情報が Do / Focus へ流れます。
+          Supabase 連携前に、Plan
+          ページの入力体験を整備しています。ここで確定した情報が Do / Focus
+          へ流れます。
         </p>
       </header>
 
@@ -107,9 +104,11 @@ function GoalInputSection() {
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
           Goal Title
         </p>
-        <h2 className="text-2xl font-semibold">今やる 1 つのテーマを 1 行で明文化</h2>
+        <h2 className="text-2xl font-semibold">
+          達成したい 目標 をここに書きましょう
+        </h2>
         <p className="text-sm text-muted-foreground">
-          タイトルは空でも構いません。ただし、Do ページの誘導とメトリクス整理のために、短くても言語化しておくのがおすすめです。
+          ゴールは空でも構いません。ただし、目標はあいまいで短くてもやりたい事として言語化しておくのがおすすめです。
         </p>
       </header>
 
@@ -117,13 +116,15 @@ function GoalInputSection() {
         <Input
           value={goalTitle}
           onChange={(event) => setGoalTitle(event.target.value)}
-          placeholder="例：司法試験に合格する（空欄でもOK）"
+          placeholder="例：ギターが上手くなりたい（空欄でもOK）"
           aria-invalid={goalError ? "true" : "false"}
           autoComplete="off"
         />
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <p className="text-muted-foreground">1 行のみ入力可。重要キーワードの抜き出しを意識しましょう。</p>
+          <p className="text-muted-foreground">
+            1 行のみ入力可。重要キーワードの抜き出しを意識しましょう。
+          </p>
           <span className="ml-auto font-mono text-muted-foreground">
             {goalTitle.length}/{GOAL_TITLE_LIMIT}
           </span>
@@ -132,17 +133,30 @@ function GoalInputSection() {
         {goalError ? (
           <p className="text-xs font-medium text-destructive">{goalError}</p>
         ) : lastSavedAt ? (
-          <p className="text-xs text-emerald-600">{lastSavedAt.toLocaleTimeString()} にローカル保存しました</p>
+          <p className="text-xs text-emerald-600">
+            {lastSavedAt.toLocaleTimeString()} にローカル保存しました
+          </p>
         ) : (
-          <p className="text-xs text-muted-foreground">空欄のままでも保存可能です。</p>
+          <p className="text-xs text-muted-foreground">
+            空欄のままでも保存可能です。
+          </p>
         )}
 
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={!isDirty || Boolean(goalError) || isSaving} className="min-w-[140px]">
+          <Button
+            type="submit"
+            disabled={!isDirty || Boolean(goalError) || isSaving}
+            className="min-w-[140px]"
+          >
             <Save className="size-4" />
             {isSaving ? "保存中…" : "Goal を保存"}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => setGoalTitle("")} disabled={!goalTitle}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setGoalTitle("")}
+            disabled={!goalTitle}
+          >
             クリア
           </Button>
         </div>
@@ -154,10 +168,19 @@ function GoalInputSection() {
 function SubgoalListSection() {
   const [subgoals, setSubgoals] = useState<Subgoal[]>(seededSubgoals);
   const [draftTitle, setDraftTitle] = useState("");
-  const [draggingSubgoalId, setDraggingSubgoalId] = useState<string | null>(null);
-  const [draggingTask, setDraggingTask] = useState<{ subgoalId: string; taskId: string } | null>(null);
-  const [pendingTaskFocusId, setPendingTaskFocusId] = useState<string | null>(null);
-  const taskInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map<string, HTMLInputElement | null>());
+  const [draggingSubgoalId, setDraggingSubgoalId] = useState<string | null>(
+    null
+  );
+  const [draggingTask, setDraggingTask] = useState<{
+    subgoalId: string;
+    taskId: string;
+  } | null>(null);
+  const [pendingTaskFocusId, setPendingTaskFocusId] = useState<string | null>(
+    null
+  );
+  const taskInputRefs = useRef<Map<string, HTMLInputElement | null>>(
+    new Map<string, HTMLInputElement | null>()
+  );
 
   const limitReached = subgoals.length >= MAX_SUBGOALS;
   const trimmedDraft = draftTitle.trim();
@@ -220,7 +243,9 @@ function SubgoalListSection() {
 
   function updateSubgoalTitle(id: string, value: string) {
     setSubgoals((prev) =>
-      prev.map((subgoal) => (subgoal.id === id ? { ...subgoal, title: value } : subgoal))
+      prev.map((subgoal) =>
+        subgoal.id === id ? { ...subgoal, title: value } : subgoal
+      )
     );
   }
 
@@ -245,7 +270,10 @@ function SubgoalListSection() {
     }
   }
 
-  function handleSubgoalTitleKeyDown(event: React.KeyboardEvent<HTMLInputElement>, subgoal: Subgoal) {
+  function handleSubgoalTitleKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>,
+    subgoal: Subgoal
+  ) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return;
     }
@@ -253,7 +281,11 @@ function SubgoalListSection() {
     addTaskRow(subgoal.id);
   }
 
-  function handleTaskTitleChange(subgoalId: string, taskId: string, value: string) {
+  function handleTaskTitleChange(
+    subgoalId: string,
+    taskId: string,
+    value: string
+  ) {
     setSubgoals((prev) =>
       prev.map((subgoal) => {
         if (subgoal.id !== subgoalId) return subgoal;
@@ -305,12 +337,18 @@ function SubgoalListSection() {
     );
   }
 
-  function handleSubgoalDragStart(event: React.DragEvent<HTMLLIElement>, id: string) {
+  function handleSubgoalDragStart(
+    event: React.DragEvent<HTMLLIElement>,
+    id: string
+  ) {
     setDraggingSubgoalId(id);
     event.dataTransfer.effectAllowed = "move";
   }
 
-  function handleSubgoalDrop(event: React.DragEvent<HTMLLIElement>, targetId: string) {
+  function handleSubgoalDrop(
+    event: React.DragEvent<HTMLLIElement>,
+    targetId: string
+  ) {
     event.preventDefault();
     event.stopPropagation();
     if (!draggingSubgoalId || draggingSubgoalId === targetId) {
@@ -320,7 +358,9 @@ function SubgoalListSection() {
 
     setSubgoals((prev) => {
       const updated = [...prev];
-      const sourceIndex = updated.findIndex((item) => item.id === draggingSubgoalId);
+      const sourceIndex = updated.findIndex(
+        (item) => item.id === draggingSubgoalId
+      );
       const targetIndex = updated.findIndex((item) => item.id === targetId);
       if (sourceIndex === -1 || targetIndex === -1) {
         return prev;
@@ -361,8 +401,12 @@ function SubgoalListSection() {
       prev.map((subgoal) => {
         if (subgoal.id !== subgoalId) return subgoal;
         const updated = [...subgoal.tasks];
-        const sourceIndex = updated.findIndex((task) => task.id === draggingTask.taskId);
-        const targetIndex = updated.findIndex((task) => task.id === targetTaskId);
+        const sourceIndex = updated.findIndex(
+          (task) => task.id === draggingTask.taskId
+        );
+        const targetIndex = updated.findIndex(
+          (task) => task.id === targetTaskId
+        );
         if (sourceIndex === -1 || targetIndex === -1) {
           return subgoal;
         }
@@ -377,17 +421,26 @@ function SubgoalListSection() {
   return (
     <section className="space-y-4 rounded-2xl border border-border/80 bg-background/60 p-6">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">Subgoal List</p>
-        <h2 className="text-2xl font-semibold">サブゴールとタスクを Drag & Drop で制御</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+          Subgoal List
+        </p>
+        <h2 className="text-2xl font-semibold">
+          サブゴールとタスクをここに作成しましょう
+          <br></br>
+          一番上のサブゴールとタスクがDo ページに反映されます
+        </h2>
         <p className="text-sm text-muted-foreground">
-          並べ替えはドラッグ＆ドロップ、Enter 操作で新規タスク行を追加します。サーバー側でも order を正規化する前提で、UI 制約も 30 件上限に合わせています。
+          並べ替えはドラッグ＆ドロップ、Enter
+          操作で新規タスク行を追加します。サーバー側でも order
+          を正規化する前提で、UI 制約も 30 件上限に合わせています。
         </p>
       </header>
 
       <ol className="space-y-4">
         {subgoals.map((subgoal, index) => {
           const isDragging = draggingSubgoalId === subgoal.id;
-          const taskLimitReached = subgoal.tasks.length >= MAX_TASKS_PER_SUBGOAL;
+          const taskLimitReached =
+            subgoal.tasks.length >= MAX_TASKS_PER_SUBGOAL;
           return (
             <li
               key={subgoal.id}
@@ -412,21 +465,24 @@ function SubgoalListSection() {
                 </button>
                 <div className="order-1 flex-1 space-y-2 sm:order-2">
                   <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                    <span>
-                      {index + 1}. Subgoal
-                    </span>
+                    <span>{index + 1}. Subgoal</span>
                     <span>
                       Tasks {subgoal.tasks.length}/{MAX_TASKS_PER_SUBGOAL}
                     </span>
                   </div>
                   <Input
                     value={subgoal.title}
-                    onChange={(event) => updateSubgoalTitle(subgoal.id, event.target.value)}
-                    onKeyDown={(event) => handleSubgoalTitleKeyDown(event, subgoal)}
-                    placeholder="サブゴールタイトル（例：章ごとに要点整理）"
+                    onChange={(event) =>
+                      updateSubgoalTitle(subgoal.id, event.target.value)
+                    }
+                    onKeyDown={(event) =>
+                      handleSubgoalTitleKeyDown(event, subgoal)
+                    }
+                    placeholder="サブゴールタイトル（例：マリーゴールドを弾けるようになる）"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Enter で新規タスク行が末尾に追加され、入力フォーカスが移動します。
+                    Enter
+                    で新規タスク行が末尾に追加され、入力フォーカスが移動します。
                   </p>
                 </div>
                 <Button
@@ -472,16 +528,30 @@ function SubgoalListSection() {
             value={draftTitle}
             onChange={(event) => setDraftTitle(event.target.value)}
             onKeyDown={handleDraftKeyDown}
-            placeholder={limitReached ? "上限に達しています" : "例：『章ごとに要点整理』など"}
+            placeholder={
+              limitReached
+                ? "上限に達しています"
+                : "サブゴールを入力（例：『ドライフラワーを弾けるようになる』など)"
+            }
             disabled={limitReached}
             aria-disabled={limitReached}
           />
-          <Button type="button" onClick={addSubgoal} disabled={!canSubmitDraft} className="sm:min-w-[160px]">
+          <Button
+            type="button"
+            onClick={addSubgoal}
+            disabled={!canSubmitDraft}
+            className="sm:min-w-[160px]"
+          >
             <Plus className="size-4" />
             Subgoal を追加
           </Button>
         </div>
-        <p className={cn("text-xs", limitReached ? "text-destructive" : "text-muted-foreground")}>
+        <p
+          className={cn(
+            "text-xs",
+            limitReached ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
           {helperText}（{subgoals.length}/{MAX_SUBGOALS}）
         </p>
       </div>
@@ -491,10 +561,20 @@ function SubgoalListSection() {
 
 type TaskListProps = {
   subgoal: Subgoal;
-  registerTaskInput: (taskId: string) => (element: HTMLInputElement | null) => void;
+  registerTaskInput: (
+    taskId: string
+  ) => (element: HTMLInputElement | null) => void;
   draggingTask: { subgoalId: string; taskId: string } | null;
-  onTaskDragStart: (event: React.DragEvent<HTMLLIElement>, subgoalId: string, taskId: string) => void;
-  onTaskDrop: (event: React.DragEvent<HTMLLIElement>, subgoalId: string, taskId: string) => void;
+  onTaskDragStart: (
+    event: React.DragEvent<HTMLLIElement>,
+    subgoalId: string,
+    taskId: string
+  ) => void;
+  onTaskDrop: (
+    event: React.DragEvent<HTMLLIElement>,
+    subgoalId: string,
+    taskId: string
+  ) => void;
   onTaskDragEnd: () => void;
   onTaskTitleChange: (subgoalId: string, taskId: string, value: string) => void;
   onTaskKeyDown: (
@@ -533,7 +613,9 @@ function TaskList({
             <li
               key={task.id}
               draggable
-              onDragStart={(event) => onTaskDragStart(event, subgoal.id, task.id)}
+              onDragStart={(event) =>
+                onTaskDragStart(event, subgoal.id, task.id)
+              }
               onDragEnd={onTaskDragEnd}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => onTaskDrop(event, subgoal.id, task.id)}
@@ -550,13 +632,17 @@ function TaskList({
               >
                 <GripVertical className="size-4" />
               </button>
-              <span className="text-xs font-semibold text-muted-foreground">{index + 1}.</span>
+              <span className="text-xs font-semibold text-muted-foreground">
+                {index + 1}.
+              </span>
               <Input
                 ref={registerTaskInput(task.id)}
                 value={task.title}
-                onChange={(event) => onTaskTitleChange(subgoal.id, task.id, event.target.value)}
+                onChange={(event) =>
+                  onTaskTitleChange(subgoal.id, task.id, event.target.value)
+                }
                 onKeyDown={(event) => onTaskKeyDown(event, subgoal.id, task.id)}
-                placeholder="タスク内容を入力（Enterで次の行を追加）"
+                placeholder="タスクを入力（例：Aマイナーを弾けるようになる）"
                 className="flex-1 min-w-[200px]"
               />
               <Button
@@ -601,8 +687,15 @@ function TaskList({
           <Plus className="size-4" />
           タスクを追加
         </Button>
-        <p className={cn("text-xs", taskLimitReached ? "text-destructive" : "text-muted-foreground")}>
-          {taskLimitReached ? "タスクは 30 件が上限です。" : "Enter からの追加も可能です。"}
+        <p
+          className={cn(
+            "text-xs",
+            taskLimitReached ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          {taskLimitReached
+            ? "タスクは 30 件が上限です。"
+            : "Enter からの追加も可能です。"}
         </p>
       </div>
     </div>
