@@ -1,7 +1,22 @@
 project_name: MonoToDo
 project_codename: monotodo-app
 language: ja
+last_updated_jst: "2026-01-20"
 
+# =====================================================
+# 0. この仕様書の位置づけ（SoT）
+# =====================================================
+spec_policy:
+  source_of_truth:
+    - "supabase/schema.sql（本仕様書内の ddl_sql と同一内容を維持）"
+    - "本仕様書（UX/ドメイン/DB/アーキの整合を保証するための一次資料）"
+  change_management:
+    - "DB仕様（DDL/RPC/Trigger/RLS）を変更する場合は schema.sql を必ず更新し、フロント（repo/hooks/pages）と同時に整合を取る"
+    - "未確定を残したまま実装に進まない（ただし案出しは可）"
+
+# =====================================================
+# 1. アシスタントの役割 / ユーザープロファイル
+# =====================================================
 assistant_role:
   description: >
     あなた（ChatGPT）は、ユーザーの開発パートナー兼メンターとして、
@@ -29,6 +44,9 @@ user_profile:
     - 矛盾や危うい点があれば、きちんと突っ込んでほしい
     - 不足や盲点を積極的に指摘してほしい
 
+# =====================================================
+# 2. プロダクト背景 / 目的 / 哲学
+# =====================================================
 background:
   motivation: |
     書籍『奪われた集中力（Stolen Focus）』の考え方と
@@ -49,412 +67,408 @@ background:
     - データ整合性・制約はできる限りDBレイヤーでガチガチに担保する
     - 長期履歴や多目的管理よりも、「一つの大きな目的に集中」することを優先
     - 必要になったらGoalリセットで全削除してやり直せる設計とする
+    - MVPはフルオンライン（オフラインキュー無し）を前提とし、複数端末利用は
+      「必要ならブラウザをリロードして最新状態に追従する」運用とする
 
+non_goals:
+  - 複数のGoalを同時に扱う高機能タスクマネージャーになること
+  - 初期MVPの段階でのPWAオフラインキュー実装
+  - リアルタイムコラボレーションや他ユーザーとの共有機能
+
+# =====================================================
+# 3. 画面構成 / UXフロー
+# =====================================================
 pages:
-  list:
-    - login
-    - setting
-    - plan
-    - do
-    - focus
-  flow: |
-    - アプリの入口は常に Do ページ。
-    - Do が「次のタスク無し」を検知すると、空状態(U5)ルールに従い Plan に誘導。
-    - Plan で Goal → Subgoal → Task を作成・編集。
-    - Do は「次のタスク」を 1 件だけカード表示し、「開始」で Focus へ遷移。
-    - Focus でポモドーロを実行し、中断/完了時は必ず確認ダイアログを出し、
-      確定後に Do へ戻る。
-    - Focus 中はナビゲーション非表示・他ページ遷移不可・タスク切替不可。
+  list: [login, setting, plan, do, focus]
 
-domain_model:
-  goal:
-    description: |
-      ユーザーにつき常に 1 つだけ存在する「目的」。
-      ユーザーは複数の目的を同時に管理せず、
-      今いちばん重要な大きなテーマを 1 つだけ選び、その中でブロック計画を行う。
-    constraints:
-      - 1ユーザー1Goal（goals.user_id に unique index）
-      - Goal タイトルは空文字OK（未設定でもよい）
-      - Goal が存在しない状態で Subgoal 挿入が来た場合、
-        DB側で空Goalを自動生成し、そのユーザーのGoalとして採用する
-  subgoal:
-    alias: block
-    description: |
-      Goal を構成する中くらいの単位（ブロック）。
-      各 Subgoal 配下に Task をぶら下げることで、目的をブロック計画法的に分解する。
-    constraints:
-      - 各 Goal あたり最大 30 件
-      - title は 255 文字まで
-      - order は正の整数で、Goal ごとに連番に正規化（サーバー側トリガー）
-      - completed は「通常タスクのみが全て完了したとき」に true になる
-      - 通常タスクが 0 件の場合は completed=false（完遂率 0%）
-  task:
-    description: |
-      Subgoal を構成する最小作業単位。
-      通常タスクとループタスク（習慣）の2種類がある。
-    types:
-      normal:
-        is_loop: false
-        role: |
-          Subgoal 完遂率および Subgoal.completed の判定対象。
-          一度完了した通常タスクは再び未完に戻さない限り、その Subgoal の進捗としてカウントされ続ける。
-      loop:
-        is_loop: true
-        role: |
-          サブゴールに紐づく習慣・繰り返し作業（例：毎日25分英語長文を読む）。
-          Subgoal 完遂率や completed 判定には含めないが、
-          日毎に完了した回数が task_completion_logs と Goal メトリクスに反映され、
-          streak には「その日1つでも完了があればOK」という条件の一部として影響する。
-    constraints:
-      - 各 Subgoal あたり最大 30 件（完了済みも含む）
-      - title 255 文字まで
-      - order は正の整数で、Subgoal ごとに連番に正規化（サーバー側トリガー）
-      - completed / completed_at を保持
-  metrics:
-    description: DBで管理する冗長メトリクス。
-    items:
-      completed_normal_task_count:
-        source: goals.completed_normal_task_count
-        meaning: >
-          「これまで完了してきた通常タスクのネット回数」。
-          complete → +1, uncomplete → -1。
-          完了済みタスクを削除しても減らさない（努力の履歴は残す）。
-      total_completed_loop_task_count:
-        source: goals.total_completed_loop_task_count
-        meaning: >
-          これまで日次ログに記録されたループタスク完了回数の累積。
-      current_streak:
-        source: goals.current_streak
-        meaning: >
-          連続完了日数。各日について、その Goal に関して通常/ループいずれか
-          1 つでも最終的に完了していれば streak++。
-          ログがない、または had_any_completion=false の日は streak が途切れる。
+ux_flow:
+  summary: |
+    - 入口は常に Do。
+    - Do が「次のタスク無し」を検知したら Plan へ誘導（空状態）。
+    - Plan で Goal → Subgoal → Task を作成・編集。
+    - Do は「次のタスク」1件だけを表示し、「開始」で Focus へ遷移。
+    - Focus でポモドーロを実行。中断/完了は必ず確認ダイアログ。
+    - Focus中はナビ非表示・他ページ遷移不可・タスク切替不可。
+  multi_device_policy: |
+    - 1ユーザー=複数端末は想定する。
+    - Realtime同期は行わず、最新状態に追従したい場合は「ブラウザリロード」運用。
+  online_only_policy: |
+    - オフライン保存/キュー/後追い同期はMVPでは実装しない。
+    - オフライン時はエラーを返し、ユーザーがオンライン復帰後に再試行する。
 
 do_page_logic:
-  next_task:
-    description: Do ページに表示する「次のタスク」を 1 件だけ決定するロジック。
+  next_task_selection:
+    description: "Doページに表示する「次のタスク」を 1件だけ決めるロジック。"
     selection_criteria:
-      - 対象は未完了タスクのみ（通常＋ループ）
-      - 優先順位:
-        1. subgoals.order 昇順
-        2. subgoals.created_at 昇順
-        3. tasks.order 昇順
-        4. tasks.created_at 昇順
-      - Subgoal 完遂率は「通常タスクのみ」を対象に整数%で算出。
+      - "対象は未完了タスクのみ（通常＋ループ）"
+      - "優先順位: subgoals.order 昇順 → subgoals.created_at 昇順 → tasks.order 昇順 → tasks.created_at 昇順"
+      - "サブゴール完遂率は『通常タスクのみ』を対象に整数%で算出"
   empty_states:
-    priority_order: [E1, E2, E3]
+    order: [E1, E2, E3]
     E1:
-      condition: サブゴール0件
+      condition: "サブゴール0件"
       heading: "目的に向けて、最初のブロックを作ろう"
       body: |
         このアプリでは“目的（Goal）”に到達するために、サブゴール（ブロック）とタスクに分けて進めます。
         Planでサブゴールとタスクを設定すると、Doに“次のタスク”が表示されます。
-      button_label: "Planでブロックを作る"
+      cta: { label: "Planでブロックを作る", to: "/plan" }
     E2:
-      condition: サブゴールはあるが通常タスク0件
+      condition: "サブゴールはあるが通常タスク0件"
       heading: "目的に合わせて、タスクまで落とし込もう"
       body: |
         サブゴール（ブロック）を、達成のための通常タスクに分けて設定しましょう。
         通常タスクを設定すると、ここに“次のタスク”が表示されます。
-      button_label: "Planでタスクを追加"
+      cta: { label: "Planでタスクを追加", to: "/plan" }
     E3:
-      condition: 未完了候補0件（全タスク完了）
+      condition: "未完了候補0件（全タスク完了）"
       heading: "タスクはすべて完了しています"
       body: "新しいタスクを追加する場合はPlanへ進んでください。"
-      button_label: "Planでタスクを追加"
+      cta: { label: "Planでタスクを追加", to: "/plan" }
 
 focus_page_logic:
   restrictions:
-    - Focus中はナビゲーションバー非表示
-    - 他ページへの遷移不可（Back操作も制御）
-    - タスクの切替不可
+    - "Focus中はナビゲーションバー非表示"
+    - "他ページへの遷移不可（Back操作も制御）"
+    - "タスクの切替不可"
+  timer_ui:
+    - "中央の大きな mm:ss 表示"
+    - "円形プログレスバー（react-circular-progressbar）"
   controls:
-    timer:
-      representation:
-        - 中央の大きな mm:ss 表示
-        - 円形プログレスバー（react-circular-progressbar）
-    buttons:
-      - label: "一時停止/再開"
-        behavior: 単一トグルボタン。押すたびに pause/resume を切り替え。メトリクスには影響しない。
-      - label: "中断"
-        behavior: 中断確認ポップアップを出す。
-      - label: "終了（完了）"
-        behavior: 完了確認ポップアップを出す。
-  dialogs:
     pause_resume:
-      effect: メトリクス/logsには影響せず、タイマー挙動のみ制御。
+      behavior: "単一トグル。pause/resume の切替。DB/メトリクスに影響しない。"
     interrupt:
-      text: "タスクは完了になりません。セッションを中断しますか？"
-      buttons: ["続ける", "中断して戻る", "キャンセル"]
-      on_confirm: タスク/ログ/メトリクスは更新せず Do に戻る。
+      dialog_text: "タスクは完了になりません。セッションを中断しますか？"
+      on_confirm: "DB更新なしで /do に戻る"
     complete:
-      text: "タスクが完了になります。セッションを終了しますか？"
-      buttons: ["完了して戻る", "続ける", "キャンセル"]
-      on_confirm: |
-        対象タスク completed=true、logs/metrics/streak 更新、Do へ戻る。
+      dialog_text: "タスクが完了になります。セッションを終了しますか？"
+      on_confirm: "RPC monotodo_complete_task を呼び、成功後 /do に戻る"
 
 plan_page_behavior:
   goal_input:
-    description: Goal タイトル 1 行入力。空でもOKだがプレースホルダで入力を促す。
+    description: "Goal タイトル 1行入力。空でもOK（プレースホルダで促す）。"
   subgoal_list:
-    interaction:
-      - DnDで並び替え（order は DB 側で連番に正規化）
-      - 削除ボタンあり（強調しすぎない）
-      - Subgoal 上限 30 件。上限超過時は追加ボタン非活性、Enter追加も無反応。
-    enter_behavior:
-      subgoal_title: >
-        サブゴールタイトル入力確定後に Enter を押すと、
-        その Subgoal の Task リスト末尾に新しい Task 行を追加する（仕様案）。  
-        ※具体的なフォーカス遷移と運用は今後の実装フェーズで最終確定。
+    rules:
+      - "DnDで並び替え（order はDB側で連番に正規化）"
+      - "削除ボタンあり（強調しすぎない）"
+      - "Subgoal 上限 30。超過時は追加不可（ボタン非活性、Enter追加も無反応）"
   task_list:
-    behavior:
-      - 1 Subgoal 内に複数 Task 行
-      - IME確定済みの Enter で「入力確定＋新規行追加」
-      - IME 確定中の Enter は追加扱いしない
-      - DnD で並び替え
-      - 削除アイコンあり
-      - is_loop トグルで通常/ループ切替（UI上の表示は控えめ）
-      - Subgoal毎に Task 上限 30 件。上限超過時は追加ボタン非活性、Enter追加も無反応。
+    rules:
+      - "1 Subgoal 内に複数 Task 行"
+      - "IME確定済み Enter で『入力確定＋新規行追加』"
+      - "IME確定中の Enter は追加扱いしない"
+      - "DnDで並び替え（order はDB側で連番に正規化）"
+      - "削除アイコンあり"
+      - "is_loop トグルで通常/ループ切替（表示は控えめ）"
+      - "Subgoal毎に Task 上限 30（完了済みも含む）。超過時は追加不可"
+  keyboard_ux_open_point:
+    status: "仕様案（最終確定前）"
+    detail: "サブゴールタイトルで Enter → その Subgoal の Task 行追加、を希望。実装フェーズで最終確定。"
+  ai_panel:
+    status: "MVPでは feature flag でOFF（後で確定してON）"
 
-metrics_and_logs:
-  logs_table: task_completion_logs
-  log_semantics: |
-    - 粒度は (user_id, goal_id, activity_date) で 1 行。
-    - had_any_completion: その日、そのGoalで通常/ループ問わず1つでも完了状態があれば true。
-    - completed_loop_count: その日に完了したループタスクの回数。
-    - completion_counter: その日の「完了状態のタスク数」（通常＋ループ）の内部カウンタ。
-  aggregation:
-    function: monotodo_aggregate_missing_days
-    behavior: |
-      - last_aggregated_date の翌日から「昨日」までの task_completion_logs を順に処理。
-      - ログなし or had_any_completion=false の日は streak を 0 に戻す。
-      - had_any_completion=true の日は streak++。
-      - completed_loop_count を total_completed_loop_task_count に加算。
-      - last_aggregated_date を昨日まで進める。
-      - 帰り値として streak_changed / metrics_changed を返し、
-        Do ページのトースト表示(U7)に利用する。
-      - 集計後、そのユーザーのループタスク completed=true をすべて
-        completed=false にリセット（メトリクスは減らさない）。
+setting_page_behavior:
+  data: "user_settings"
+  status: "未確定点あり"
+  open_points:
+    - "保存タイミング（即時反映 vs 保存ボタン）"
+    - "入力UI（数値入力/スライダー等）"
+    - "バリデーション（最小/最大、整数）をフロント/DBどちらでどう担保するか"
 
-error_codes:
-  description: DB → フロントで共通的に扱うエラーキー。UIでの文言はキーから一意にマッピング。
-  keys:
-    - MONOTODO_GOAL_EXISTS
-    - MONOTODO_FORBIDDEN
-    - MONOTODO_UNAUTHORIZED
-    - MONOTODO_SUBGOAL_LIMIT_EXCEEDED
-    - MONOTODO_TASK_LIMIT_EXCEEDED
-    - MONOTODO_TITLE_TOO_LONG
-    - MONOTODO_INVALID_ORDER
-    - MONOTODO_SAVE_FAILED_RETRY
+# =====================================================
+# 4. ドメインモデル / メトリクス / ログ
+# =====================================================
+domain_model:
+  goal:
+    description: "ユーザーにつき常に1つだけ存在する『目的』。"
+    constraints:
+      - "1ユーザー1Goal（goals.user_id UNIQUE）"
+      - "Goal.title は空文字OK"
+      - "Goalがない状態でSubgoal挿入が来たら、DB側で空Goalを自動生成して採用（RPC）"
+  subgoal:
+    alias: "block"
+    constraints:
+      - "Goalあたり最大30件"
+      - "title 255文字まで（DBトリガーで拒否）"
+      - "order は正の整数、Goal内で連番に正規化（トリガー）"
+      - "completed は『通常タスクのみが全て完了』で true"
+      - "通常タスク0件なら completed=false、進捗0%"
+  task:
+    types:
+      normal:
+        is_loop: false
+        role: "Subgoal完遂率・Subgoal.completed 判定対象。"
+      loop:
+        is_loop: true
+        role: |
+          サブゴールに紐づく習慣タスク。
+          Subgoal完遂率/完了判定には含めないが、日次ログとGoalメトリクス（累積）に反映し、
+          streak条件（その日1つでも完了があればOK）の一部として影響する。
+    constraints:
+      - "Subgoalあたり最大30件（完了済みも含む）"
+      - "title 255文字まで"
+      - "order は正の整数、Subgoal内で連番に正規化（トリガー）"
+      - "completed / completed_at を保持"
+  metrics:
+    goals_columns:
+      completed_normal_task_count:
+        meaning: "通常タスク完了の累積回数。完了→解除で増減し、タスク削除では変更しない。"
+      total_completed_loop_task_count:
+        meaning: "ループタスク完了の累積回数。日次集計で加算される。"
+      current_streak:
+        meaning: "連続活動日数（前日まで集計済み）。"
+      last_aggregated_date:
+        meaning: "streak/ループ集計済みの最終日。"
+  logs:
+    table: "task_completion_logs"
+    grain: "(user_id, goal_id, activity_date) で1行"
+    semantics:
+      - "had_any_completion: その日、そのGoalで通常/ループ問わず1つでも完了状態があれば true"
+      - "completed_loop_count: その日に完了したループタスク回数"
+      - "completion_counter: その日の完了状態タスク数（通常＋ループ）の内部カウンタ"
 
+# =====================================================
+# 5. 時刻・タイムゾーン設計（重要）
+# =====================================================
+time_and_timezone:
+  conclusion: "JST化は『活動日（date）と集計ロジック』に適用済み。タイムスタンプはUTC保存を維持。"
+  rationale: |
+    - timestamptz（created_at/updated_at/completed_at）は「絶対時刻」であり、UTC保存が運用・移行・比較で安全。
+    - 一方で、streak や「その日の完了」を判定する activity_date はユーザーの生活日付（JST）に合わせる必要がある。
+    - よって「date は JST」「timestamptz は UTC」を採用する。
+  implemented:
+    - "monotodo_current_jst_date() を追加し、RPC内で v_today をJST dateとして計算"
+    - "monotodo_complete_task / monotodo_aggregate_missing_days は JST date で処理"
+  not_converted_and_reason:
+    - item: "created_at / updated_at / completed_at の default / 更新"
+      reason: "UTC保存（timestamptz）を維持するため。アプリ表示時にJSTへ変換すればよい。"
+
+# =====================================================
+# 6. 認証・セキュリティ
+# =====================================================
+auth_and_security:
+  auth:
+    provider: "Supabase Auth"
+    model: "auth.users"
+    usage:
+      - "フロントは Supabase Auth でログインし、JWTにより auth.uid() がDB側で参照できる"
+      - "未ログインは /login にリダイレクト（RequireAuth）"
+  rls_policy:
+    summary: "全業務テーブルは RLS 有効。auth.uid() と user_id の一致でアクセス制御。"
+  rpc_security_definer:
+    summary: |
+      - 主要RPCは security definer。
+      - RPC内で auth.uid() が null の場合は拒否、対象データが自ユーザーか検証する。
+  error_codes:
+    mapping_keys:
+      - MONOTODO_GOAL_EXISTS
+      - MONOTODO_FORBIDDEN
+      - MONOTODO_UNAUTHORIZED
+      - MONOTODO_SUBGOAL_LIMIT_EXCEEDED
+      - MONOTODO_TASK_LIMIT_EXCEEDED
+      - MONOTODO_TITLE_TOO_LONG
+      - MONOTODO_INVALID_ORDER
+      - MONOTODO_SAVE_FAILED_RETRY
+
+security_notes:
+  react_rsc_cve_2025_55182:
+    conclusion: |
+      MonoToDo は Vite + react-router-dom の SPA として提供し、React Server Components（RSC）を処理するサーバーが基本的に存在しない。
+      そのため「不正なFlightペイロードをRSC処理サーバーへ送ることで成立する」タイプの影響は、現アーキテクチャでは原則受けない前提。
+    scope_guard:
+      - "将来 Next.js 等で RSC を処理する構成に変更した場合は再評価が必須"
+      - "依存に react-server-dom-* を導入する場合は同様に再評価が必須"
+
+# =====================================================
+# 7. 技術スタック / デプロイ
+# =====================================================
 tech_stack:
   frontend:
     - Vite
     - React
     - TypeScript
-    - TailwindCSS
-    - shadcn/ui
     - react-router-dom
+    - TailwindCSS
+    - shadcn/ui (Radix UI)
     - react-circular-progressbar
+    - @supabase/supabase-js
   backend:
-    - Supabase (Auth / Postgres / RLS / RPC / トリガー)
+    - Supabase (Auth / Postgres / RLS / RPC / Trigger)
   deployment:
-    - Vercel
-  optional:
-    - PWA（オフラインキュー＋オンライン時同期は将来実装予定）
-  ai_integration:
-    provider: Google AI Studio (Gemini)
-    usage_plan: |
-      - Plan ページに AI 提案パネルを設ける。
-      - Goal / Subgoal / Task の情報をもとにサブゴール案・タスク案を生成。
-      - 採用 / 非採用を ai_suggestion_sessions / ai_suggestion_items にログとして保存。
-      - MVP では feature flag で OFF としておき、Plan UI 完成後に仕様を確定して ON にする。
+    platform: "Vercel"
+    policy_minimum:
+      - "VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY はVercel環境変数で管理（リポジトリに入れない）"
+      - "Preview/Production で環境変数（少なくともキー）を分離する方針を推奨（MVPは最小運用でも可）"
+  offline_policy:
+    - "オフライン案は棄却。フルオンライン前提。"
+
+# =====================================================
+# 8. アーキテクチャ / フォルダ構成
+# =====================================================
+architecture:
+  layers:
+    presentation:
+      responsibility: "画面と見た目（ユーザーに見える部分）。"
+      modules:
+        - "src/pages/**"
+        - "src/components/**"
+        - "src/routes/router.tsx"
+        - "src/styles/**"
+        - "src/App.tsx"
+        - "src/main.tsx"
+    application:
+      responsibility: "画面固有ロジック・ユースケース（hook/service）。"
+      modules:
+        - "src/features/do/hooks/useDoPageData.ts"
+        - "src/features/plan/hooks/usePlanData.ts"
+        - "src/features/focus/hooks/useFocusTimer.ts"
+        - "src/service/**（予定地）"
+        - "src/hooks/**（共通hooks予定地）"
+    infrastructure:
+      responsibility: "外部I/O（Supabase）とデータアクセス（repositories）。"
+      modules:
+        - "src/lib/supabaseClient.ts"
+        - "src/repositories/*.ts"
+        - "src/types/domain.ts"
+        - "supabase/schema.sql"
+        - "supabase/seed.sql"
 
 filesystem_layout:
-  root:
-    path: monotodo-app/
-    structure: |
-      monotodo-app/
-      ├─ node_modules/      # 依存ライブラリ
-      ├─ public/            # 静的ファイル
-      ├─ src/               # フロントエンドの本体コード
-      └─ supabase/          # DB（Postgres / Supabase）関連のSQL
-  src:
-    structure: |
-      src/
-      ├─ App.tsx
-      ├─ env.d.ts
-      ├─ main.tsx
-      │
-      ├─ assets/
-      │  └─ react.svg
-      │
-      ├─ components/
-      │  ├─ layouts/
-      │  │  ├─ AppLayout.tsx       # 通常レイアウト（Nav付き）
-      │  │  └─ FocusLayout.tsx     # Focus専用レイアウト（Navなし）
-      │  │
-      │  └─ ui/                    # shadcn/ui ベースのUI部品
-      │     ├─ button.tsx
-      │     ├─ dialog.tsx
-      │     └─ input.tsx
-      │
-      ├─ features/
-      │  ├─ do/
-      │  │  └─ hooks/
-      │  │      └─ useDoPageData.ts
-      │  │
-      │  ├─ focus/
-      │  │  └─ hooks/
-      │  │      └─ useFocusTimer.ts
-      │  │
-      │  └─ plan/
-      │      └─ hooks/
-      │          └─ usePlanData.ts
-      │
-      ├─ hooks/                     # 画面横断の共通 hooks 用（今は空）
-      │
-      ├─ lib/
-      │  ├─ supabaseClient.ts      # Supabase クライアント
-      │  └─ utils.ts
-      │
-      ├─ pages/
-      │  ├─ auth/
-      │  │  ├─ LoginPage.tsx
-      │  │  └─ RequireAuth.tsx
-      │  │
-      │  ├─ do/
-      │  │  └─ DoPage.tsx
-      │  │
-      │  ├─ focus/
-      │  │  └─ FocusPage.tsx
-      │  │
-      │  ├─ plan/
-      │  │  ├─ PlanAiPanel.tsx
-      │  │  ├─ PlanPage.tsx
-      │  │  └─ PlanSidebar.tsx
-      │  │
-      │  └─ setting/
-      │      └─ SettingPage.tsx
-      │
-      ├─ repositories/
-      │  ├─ doRepository.ts
-      │  ├─ goalRepository.ts
-      │  └─ taskRepository.ts
-      │
-      ├─ routes/
-      │  └─ router.tsx
-      │
-      ├─ service/                   # ユースケース・アプリケーションサービス予定地（今は空）
-      │
-      ├─ styles/
-      │  └─ global.css
-      │
-      └─ types/
-         └─ domain.ts
-  supabase:
-    structure: |
-      supabase/
-      ├─ schema.sql   # テーブル・関数・トリガなどの定義（この YAML の ddl_sql を格納）
-      └─ seed.sql     # 開発用の初期データ
+  root: |
+    monotodo-app/
+    ├─ node_modules/      # 依存ライブラリ
+    ├─ public/            # 静的ファイル
+    ├─ src/               # フロントエンドの本体コード
+    └─ supabase/          # DB（Postgres / Supabase）関連のSQL
+  src: |
+    src/
+    ├─ App.tsx
+    ├─ env.d.ts
+    ├─ main.tsx
+    ├─ assets/
+    │  └─ react.svg
+    ├─ components/
+    │  ├─ layouts/
+    │  │  ├─ AppLayout.tsx
+    │  │  └─ FocusLayout.tsx
+    │  └─ ui/
+    │     ├─ button.tsx
+    │     ├─ dialog.tsx
+    │     └─ input.tsx
+    ├─ features/
+    │  ├─ do/hooks/useDoPageData.ts
+    │  ├─ focus/hooks/useFocusTimer.ts
+    │  └─ plan/hooks/usePlanData.ts
+    ├─ hooks/                  # 共通hooks（今は空）
+    ├─ lib/
+    │  ├─ supabaseClient.ts
+    │  └─ utils.ts
+    ├─ pages/
+    │  ├─ auth/LoginPage.tsx
+    │  ├─ auth/RequireAuth.tsx
+    │  ├─ do/DoPage.tsx
+    │  ├─ focus/FocusPage.tsx
+    │  ├─ plan/PlanAiPanel.tsx
+    │  ├─ plan/PlanPage.tsx
+    │  ├─ plan/PlanSidebar.tsx
+    │  └─ setting/SettingPage.tsx
+    ├─ repositories/
+    │  ├─ doRepository.ts
+    │  ├─ goalRepository.ts
+    │  └─ taskRepository.ts
+    ├─ routes/router.tsx
+    ├─ service/                # 予定地（今は空）
+    ├─ styles/global.css
+    └─ types/domain.ts
+  supabase: |
+    supabase/
+    ├─ schema.sql   # テーブル・関数・トリガなど（本仕様書の ddl_sql と一致させる）
+    └─ seed.sql     # 開発用の初期データ（任意）
 
-architecture:
-  presentation_layer:
-    responsibility: |
-      画面と見た目。ユーザーに直接見える部分のすべて。
-      pages, components, routes, styles が属する。
-    modules:
-      - src/main.tsx
-      - src/App.tsx
-      - src/routes/router.tsx
-      - src/pages/**
-      - src/components/**
-      - src/styles/**
-  application_layer:
-    responsibility: |
-      画面固有ロジック・ユースケース（アプリケーションサービス）。
-      features の hooks や service/ のユースケース関数で構成される。
-    modules:
-      - src/features/do/hooks/useDoPageData.ts
-      - src/features/plan/hooks/usePlanData.ts
-      - src/features/focus/hooks/useFocusTimer.ts
-      - src/service/** （resetGoalService, completeTaskService などを置く予定地）
-      - 共通 hooks: src/hooks/**
-  infrastructure_layer:
-    responsibility: |
-      DB・API・外部サービスへのアクセス担当。
-      Supabase クライアント、リポジトリ、ドメイン型、Supabase SQL が属する。
-    modules:
-      - src/lib/supabaseClient.ts
-      - src/repositories/*.ts
-      - src/types/domain.ts
-      - src/env.d.ts
-      - supabase/schema.sql
-      - supabase/seed.sql
+# =====================================================
+# 9. フロントエンド仕様（データ取得責務）
+# =====================================================
+frontend_spec:
+  routing:
+    entry_route: "/do"
+    routes:
+      - { path: "/login", component: "LoginPage", layout: null, guard: null }
+      - { path: "/plan", component: "PlanPage", layout: "AppLayout", guard: "RequireAuth" }
+      - { path: "/do", component: "DoPage", layout: "AppLayout", guard: "RequireAuth" }
+      - { path: "/focus", component: "FocusPage", layout: "FocusLayout", guard: "RequireAuth" }
+      - { path: "/setting", component: "SettingPage", layout: "AppLayout", guard: "RequireAuth" }
+  data_access_pattern:
+    - "pages は hooks から state / actions を受け取り描画に集中する"
+    - "hooks は repositories を注入され、データ取得・状態管理・リトライを担う"
+    - "repositories は Supabase（RPC/Select/Update）を呼び、必要なら戻り値整形とエラー分類を担う"
+  current_dev_note:
+    - "現状、DoPage は inMemoryRepo を内部定義し useDoPageData(inMemoryRepo) を呼ぶ暫定実装が存在"
+    - "最終的には SupabaseRepo 実装に差し替え（repo注入のみで差し替え可能にする）"
 
+# =====================================================
+# 10. 実装状況 / タスク
+# =====================================================
 implementation_status:
   db:
-    status: "確定・作成済み（Supabase 上に適用済み）"
-    notes: |
-      - 提示された DDL に基づいて、Supabase プロジェクトにテーブル・関数・トリガ・RLS が作成済み。
-      - 追加で monotodo_tasks_after_change の安全パッチを CREATE OR REPLACE で適用済み。
-      - completed_normal_task_count の意味は「これまで完了してきた通常タスクのネット回数」として扱うことで確定。
-  supabase_client:
-    status: "src/lib/supabaseClient.ts として定義済み or 定義予定"
-    notes: |
-      - VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY を env に設定した上で、
-        createClient() を用いて Supabase クライアントを生成する。
+    status: "適用済み（JST date & bugfix 反映版DDL）"
+    notes:
+      - "JST化は『活動日(date)と集計ロジック』に適用済み。timestamptzはUTC保存。"
+      - "order 正規化は DELETE 対応版を採用。"
+      - "tasks_after_change は DELETE 安全対応済み。"
   frontend:
-    status: "アーキ構造とフォルダ構造は確定、実装はこれから"
-    next_steps:
-      - doRepository.ts を実装し、RPC と goals メトリクス取得をつなぐ
-      - useDoPageData フックと DoPage.tsx を実装し、「次のタスク 1 件」UI を完成させる
-      - Plan / Focus / Setting / Login の順に実装を進める
+    status: "UI先行（DoPage/useDoPageData のみ、Supabase repositories は未完成）"
+  deployment:
+    status: "Vercel 予定（環境変数の配置のみ最小で実施）"
 
-open_questions_and_todos:
-  - id: settings-ui-detail
-    area: Settingページ
-    status: 未確定
-    detail: |
-      - 作業時間 / 休憩時間 / 長休憩時間の UI を、
-        数値入力/スライダーなどどのコンポーネントで実現するか。
-      - 保存タイミング（即時反映か保存ボタン押下か）とバリデーションの仕様。
-  - id: pwa_offline_queue
-    area: PWA・オフライン同期
-    status: 未確定（将来対応）
-    detail: |
-      - どの操作をオフラインキューに入れるか（Plan の追加/編集/削除、完了操作など）。
-      - リトライ戦略（指数バックオフなど）や、上限超過時の扱い。
-      - 仕様としては「オフライン同期でも上限超過が発生しないようにする」としているが、
-        具体的な実装パターンは未確定。
-  - id: ai_prompt_design
-    area: Plan×AI連携
-    status: 未確定（Plan MVP 完成後に詰める）
-    detail: |
-      - Google AI Studio (Gemini) に対してどのようなプロンプト/コンテキストを渡すのか。
-      - サブゴール案 / タスク案の表現形式と、UIへの組み込み方。
-      - 提案の採用/非採用をどうログし、どこまでユーザーに見せるか。
-  - id: circle_progress_visual
-    area: 円形プログレスの見た目
-    status: 未確定（実装時調整）
-    detail: |
-      - react-circular-progressbar の線幅、色、テキスト位置など細部のデザイン。
-      - Do / Focus 両方で共通の <CircleProgress /> ラッパを使うが、
-        具体的なスタイル値はまだ決めきっていない。
-  - id: plan_enter_behavior_subgoal
-    area: PlanページのキーボードUX
-    status: 仕様案あり / 最終確定前
-    detail: |
-      - サブゴールタイトルで Enter を押したときに、
-        「新しい Subgoal を作る」のか「その Subgoal の Task を追加する」のか。
-      - 現時点の要望は「サブゴールで Enter → その Subgoal 配下に新しい Task 行を追加」だが、
-        既存の Task Enter 挙動との一貫性やキーボード操作フローを踏まえて、
-        実装フェーズで最終的に詰める必要がある。
+task_board:
+  active_priority:
+    - id: "DB-SoT-1"
+      title: "schema.sql を現行DDLで固定し、運用手順を明文化"
+      owner: "メンバーM"
+      reviewer: "ユーザー"
+      definition_of_done:
+        - "supabase/schema.sql が本仕様書の ddl_sql と一致"
+        - "適用手順（SQL Editor or migration）を1ページで記載"
+    - id: "DB-SEC-1"
+      title: "RLS / security definer 前提の点検チェックリスト作成"
+      owner: "メンバーM"
+      reviewer: "ユーザー"
+    - id: "REPO-DO-1"
+      title: "DoRepository interface を最小で固定し inMemory と Supabase を両対応"
+      owner: "メンバーM"
+      reviewer: "ユーザー"
+    - id: "REPO-DO-2"
+      title: "SupabaseDoRepository を実装（aggregate_missing_days / select_next_task / metrics取得）"
+      owner: "メンバーM"
+      reviewer: "ユーザー"
+    - id: "REPO-ERR-1"
+      title: "DBエラー（MONOTODO_*）の分類とUIマッピング方針を決定"
+      owner: "メンバーM"
+      reviewer: "ユーザー"
+  deferred_low_priority:
+    - id: "OPS-DEP-1"
+      title: "依存固定・更新方針（caret運用、lockfile厳守、脆弱性対応手順）"
+      note: "今は重くやらない。最低限 lockfile 運用のみ徹底。"
+    - id: "OPS-VERCEL-1"
+      title: "Vercel デプロイ詳細（環境分離/Preview運用）"
+      note: "今は最低限、環境変数の秘匿と（可能なら）Preview/Prod分離だけ明文化。"
 
+open_questions:
+  - id: "SETTINGS-UI-1"
+    area: "Settingページ"
+    question: "保存タイミング（即時 or 保存ボタン）とUI部品の選定"
+  - id: "PLAN-KB-1"
+    area: "Planページ"
+    question: "サブゴールタイトル Enter の挙動を最終確定（Task追加にするか等）"
+  - id: "UI-PROGRESS-1"
+    area: "円形プログレス"
+    question: "線幅/表示/共通コンポーネント化の最終デザイン値"
+
+# =====================================================
+# 11. DB DDL（現行：JST & bugfix 反映版）
+# =====================================================
 ddl_sql: |
   -- ==========================================
-  -- MonoToDo DB DDL 完全版
+  -- MonoToDo DB DDL 完全版（JST & bugfix 反映版）
   -- （Supabase Postgres / Supabase Auth 前提）
   -- ==========================================
 
@@ -485,6 +499,14 @@ ddl_sql: |
     return new;
   end;
   $$ language plpgsql;
+
+  -- JST 日付ヘルパー
+  create or replace function public.monotodo_current_jst_date()
+  returns date
+  language sql
+  as $$
+    select (now() at time zone 'Asia/Tokyo')::date;
+  $$;
 
   -- ==========================================
   -- goals：1ユーザー1Goal
@@ -569,6 +591,19 @@ ddl_sql: |
     return v_goal_id;
   end;
   $$;
+
+  -- メトリクス列コメント
+  comment on column public.goals.completed_normal_task_count is
+    '通常タスク完了の累積回数。完了→解除で増減し、タスク削除では変更しない。';
+
+  comment on column public.goals.total_completed_loop_task_count is
+    'ループタスク完了の累積回数。JST基準の日次集計で加算される。';
+
+  comment on column public.goals.current_streak is
+    'JST基準の連続活動日数（前日まで集計済み）。';
+
+  comment on column public.goals.last_aggregated_date is
+    'JST基準でstreak／ループタスクを集計済みの最終日。';
 
   -- ==========================================
   -- user_settings：Goal リセット対象外
@@ -658,12 +693,20 @@ ddl_sql: |
   before insert or update on public.subgoals
   for each row execute function public.monotodo_subgoals_before_write();
 
-  -- order 詰め直し
+  -- order 詰め直し（DELETE 対応版）
   create or replace function public.monotodo_normalize_subgoal_order()
-  returns trigger as $$
+  returns trigger
+  language plpgsql
+  as $$
   declare
-    v_goal_id uuid := coalesce(new.goal_id, old.goal_id);
+    v_goal_id uuid;
   begin
+    if tg_op = 'DELETE' then
+      v_goal_id := old.goal_id;
+    else
+      v_goal_id := new.goal_id;
+    end if;
+
     with ranked as (
       select id,
              row_number() over (order by "order", created_at, id) as rn
@@ -675,9 +718,9 @@ ddl_sql: |
       from ranked r
      where s.id = r.id;
 
-    return new;
+    return null;
   end;
-  $$ language plpgsql;
+  $$;
 
   create trigger trg_subgoals_normalize_order
   after insert or update or delete on public.subgoals
@@ -754,12 +797,20 @@ ddl_sql: |
   before insert or update on public.tasks
   for each row execute function public.monotodo_tasks_before_write();
 
-  -- order 詰め直し
+  -- order 詰め直し（DELETE 対応版）
   create or replace function public.monotodo_normalize_task_order()
-  returns trigger as $$
+  returns trigger
+  language plpgsql
+  as $$
   declare
-    v_subgoal_id uuid := coalesce(new.subgoal_id, old.subgoal_id);
+    v_subgoal_id uuid;
   begin
+    if tg_op = 'DELETE' then
+      v_subgoal_id := old.subgoal_id;
+    else
+      v_subgoal_id := new.subgoal_id;
+    end if;
+
     with ranked as (
       select id,
              row_number() over (order by "order", created_at, id) as rn
@@ -771,9 +822,9 @@ ddl_sql: |
       from ranked r
      where t.id = r.id;
 
-    return new;
+    return null;
   end;
-  $$ language plpgsql;
+  $$;
 
   create trigger trg_tasks_normalize_order
   after insert or update or delete on public.tasks
@@ -817,12 +868,14 @@ ddl_sql: |
   end;
   $$;
 
-  -- 修正版 monotodo_tasks_after_change（DELETE 安全対応）
+  -- tasks 変更時の subgoal.completed 更新トリガー
   create or replace function public.monotodo_tasks_after_change()
-  returns trigger as $$
+  returns trigger
+  language plpgsql
+  as $$
   begin
     -- INSERT / UPDATE のとき：新しい subgoal 側を更新
-    if tg_op in ('INSERT','UPDATE') then
+    if tg_op in ('INSERT', 'UPDATE') then
       perform public.monotodo_update_subgoal_completed(new.subgoal_id);
     end if;
 
@@ -837,7 +890,7 @@ ddl_sql: |
 
     return new;
   end;
-  $$ language plpgsql;
+  $$;
 
   create trigger trg_tasks_after_change
   after insert or update or delete on public.tasks
@@ -866,6 +919,9 @@ ddl_sql: |
 
   create unique index task_completion_logs_user_goal_date_unique
     on public.task_completion_logs(user_id, goal_id, activity_date);
+
+  comment on column public.task_completion_logs.activity_date is
+    'JST基準の活動日。完了操作がこの日付に紐づいて集計される。';
 
   -- ==========================================
   -- AI ログ
@@ -958,15 +1014,15 @@ ddl_sql: |
     ),
     candidate as (
       select
-        t.id as task_id,
-        t.title as task_title,
+        t.id          as task_id,
+        t.title       as task_title,
         t.is_loop,
-        t."order" as task_order,
-        t.created_at as task_created_at,
-        s.id as subgoal_id,
-        s.title as subgoal_title,
-        s."order" as subgoal_order,
-        s.created_at as subgoal_created_at
+        t."order"     as task_order,
+        t.created_at  as task_created_at,
+        s.id          as subgoal_id,
+        s.title       as subgoal_title,
+        s."order"     as subgoal_order,
+        s.created_at  as subgoal_created_at
       from public.tasks t
       join public.subgoals s on s.id = t.subgoal_id
       join cg on cg.id = s.goal_id
@@ -1009,7 +1065,7 @@ ddl_sql: |
   $$;
 
   -- ==========================================
-  -- RPC：タスク完了/解除（logs + メトリクス更新）
+  -- RPC：タスク完了/解除（JST 対応版）
   -- ==========================================
 
   create or replace function public.monotodo_complete_task(
@@ -1025,7 +1081,7 @@ ddl_sql: |
     v_user_id uuid := auth.uid();
     v_task record;
     v_goal_id uuid;
-    v_today date := current_date;
+    v_today date := public.monotodo_current_jst_date();
     v_log public.task_completion_logs%rowtype;
     v_delta integer;
   begin
@@ -1034,11 +1090,11 @@ ddl_sql: |
     end if;
 
     select t.*, s.goal_id, g.user_id as goal_user_id
-    into v_task
-    from public.tasks t
-    join public.subgoals s on s.id = t.subgoal_id
-    join public.goals g on g.id = s.goal_id
-    where t.id = p_task_id;
+      into v_task
+      from public.tasks t
+      join public.subgoals s on s.id = t.subgoal_id
+      join public.goals g on g.id = s.goal_id
+     where t.id = p_task_id;
 
     if not found or v_task.goal_user_id <> v_user_id then
       raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
@@ -1054,19 +1110,19 @@ ddl_sql: |
     -- tasks 更新
     if p_completed then
       update public.tasks
-         set completed = true,
+         set completed    = true,
              completed_at = timezone('utc', now()),
-             updated_at = timezone('utc', now())
+             updated_at   = timezone('utc', now())
        where id = p_task_id;
     else
       update public.tasks
-         set completed = false,
+         set completed    = false,
              completed_at = null,
-             updated_at = timezone('utc', now())
+             updated_at   = timezone('utc', now())
        where id = p_task_id;
     end if;
 
-    -- 通常タスクの完了数（現在値）を即時更新
+    -- 通常タスクの完了数（累積）を即時更新
     if not v_task.is_loop then
       update public.goals
          set completed_normal_task_count =
@@ -1074,7 +1130,7 @@ ddl_sql: |
        where id = v_goal_id;
     end if;
 
-    -- 今日のログ行を確保
+    -- 今日のログ行を確保（JST 基準の日付）
     insert into public.task_completion_logs(user_id, goal_id, activity_date)
     values (v_user_id, v_goal_id, v_today)
     on conflict (user_id, goal_id, activity_date) do nothing;
@@ -1094,29 +1150,32 @@ ddl_sql: |
       v_delta := -1;
     end if;
 
-    v_log.completion_counter := greatest(0, v_log.completion_counter + v_delta);
+    v_log.completion_counter :=
+      greatest(0, v_log.completion_counter + v_delta);
 
     -- ループタスクのその日分カウント
     if v_task.is_loop then
       if p_completed then
-        v_log.completed_loop_count := v_log.completed_loop_count + 1;
+        v_log.completed_loop_count :=
+          v_log.completed_loop_count + 1;
       else
-        v_log.completed_loop_count := greatest(0, v_log.completed_loop_count - 1);
+        v_log.completed_loop_count :=
+          greatest(0, v_log.completed_loop_count - 1);
       end if;
     end if;
 
     v_log.had_any_completion := (v_log.completion_counter > 0);
 
     update public.task_completion_logs
-       set completion_counter = v_log.completion_counter,
+       set completion_counter   = v_log.completion_counter,
            completed_loop_count = v_log.completed_loop_count,
-           had_any_completion = v_log.had_any_completion
+           had_any_completion   = v_log.had_any_completion
      where id = v_log.id;
   end;
   $$;
 
   -- ==========================================
-  -- RPC：未集計日をまとめて集計（U7／streak 用）
+  -- RPC：未集計日をまとめて集計（JST 対応版）
   -- ==========================================
 
   create or replace function public.monotodo_aggregate_missing_days()
@@ -1131,7 +1190,7 @@ ddl_sql: |
   declare
     v_user_id uuid := auth.uid();
     v_goal public.goals%rowtype;
-    v_today date := current_date;
+    v_today date := public.monotodo_current_jst_date();
     v_target_end_date date;
     v_from_date date;
     v_d date;
@@ -1144,7 +1203,9 @@ ddl_sql: |
     v_any_changed boolean := false;
   begin
     if v_user_id is null then
-      raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+      streak_changed := false;
+      metrics_changed := false;
+      return;
     end if;
 
     select * into v_goal
@@ -1157,7 +1218,7 @@ ddl_sql: |
       return;
     end if;
 
-    -- 今日の分はまだ最終状態が確定していないので「昨日まで」を集計対象に
+    -- JST 今日の分はまだ確定していないので「昨日まで」を集計対象に
     v_target_end_date := v_today - 1;
 
     if v_target_end_date <= coalesce(v_goal.last_aggregated_date, date '0001-01-01') then
@@ -1197,10 +1258,10 @@ ddl_sql: |
     end if;
 
     v_streak_before := v_goal.current_streak;
-    v_loop_before := v_goal.total_completed_loop_task_count;
+    v_loop_before   := v_goal.total_completed_loop_task_count;
 
     v_streak_after := v_goal.current_streak;
-    v_loop_after := v_goal.total_completed_loop_task_count;
+    v_loop_after   := v_goal.total_completed_loop_task_count;
 
     v_d := v_from_date;
     while v_d <= v_target_end_date loop
@@ -1228,10 +1289,10 @@ ddl_sql: |
     end loop;
 
     update public.goals
-       set current_streak = v_streak_after,
+       set current_streak                  = v_streak_after,
            total_completed_loop_task_count = v_loop_after,
-           last_aggregated_date = v_target_end_date,
-           updated_at = timezone('utc', now())
+           last_aggregated_date            = v_target_end_date,
+           updated_at                      = timezone('utc', now())
      where id = v_goal.id;
 
     v_streak_changed := (v_streak_before <> v_streak_after);
@@ -1239,9 +1300,9 @@ ddl_sql: |
 
     -- 日跨ぎ時のループタスク自動リセット（metrics は減らさない）
     update public.tasks
-       set completed = false,
+       set completed    = false,
            completed_at = null,
-           updated_at = timezone('utc', now())
+           updated_at   = timezone('utc', now())
      where user_id = v_user_id
        and is_loop = true
        and completed = true;
