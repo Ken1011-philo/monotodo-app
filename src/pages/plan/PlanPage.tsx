@@ -653,7 +653,7 @@ function TaskList({
                 aria-pressed={task.isLoop}
                 onClick={() => onToggleLoop(subgoal.id, task.id)}
               >
-                {task.isLoop ? "ループ" : "通常"}
+                {task.isLoop ? "定期" : "一回"}
               </Button>
               <Button
                 type="button"
