@@ -41,7 +41,6 @@ type SubgoalRow = {
 type TaskRow = {
   id: string;
   user_id: string;
-  goal_id?: string;
   subgoal_id: string;
   title: string;
   kind: "normal" | "loop_instance";
@@ -101,10 +100,11 @@ const mapSubgoal = (row: SubgoalRow): Subgoal => ({
   syncSeq: row.sync_seq,
 });
 
-const mapTask = (row: TaskRow): Task => ({
+// tasks table does not store goal_id; callers should inject it from the parent subgoal.
+const mapTask = (row: TaskRow, goalId?: UUID): Task => ({
   id: row.id,
   userId: row.user_id,
-  goalId: row.goal_id ?? "",
+  goalId: goalId ?? "",
   subgoalId: row.subgoal_id,
   title: row.title,
   kind: row.kind,
@@ -189,10 +189,7 @@ async function fetchSubgoalTree(goalId: UUID): Promise<PlanSubgoalNode[]> {
     const goalId = row.goal_id as UUID;
     return {
       ...mapSubgoal(row as SubgoalRow),
-      tasks: relatedTasks.map((task) => {
-        const mapped = mapTask(task as TaskRow);
-        return { ...mapped, goalId };
-      }),
+      tasks: relatedTasks.map((task) => mapTask(task as TaskRow, goalId)),
       loopTaskTemplates: relatedLoops.map((loop) => mapLoopTemplate(loop as LoopTemplateRow)),
     };
   });

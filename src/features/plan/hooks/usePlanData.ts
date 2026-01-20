@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { goalRepository } from "@/repositories/goalRepository";
-import { taskRepository } from "@/repositories/taskRepository";
+import { planRepository } from "@/repositories/planRepository";
 import type {
   Goal,
   LoopTaskTemplate,
@@ -58,7 +57,7 @@ export function usePlanData() {
   const loadPlan = useCallback(async () => {
     setStatus((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const data = await goalRepository.fetchPlan();
+      const data = await planRepository.fetchPlan();
       setPlan({
         goal: data.goal,
         subgoals: data.subgoals,
@@ -80,7 +79,7 @@ export function usePlanData() {
       const expectedRevision = plan.goal?.revision ?? null;
       setStatus((prev) => ({ ...prev, savingGoal: true, error: null }));
       try {
-        const saved = await goalRepository.saveGoalTitle({ title, expectedRevision });
+        const saved = await planRepository.saveGoalTitle({ title, expectedRevision });
         setPlan((prev) => ({ ...prev, goal: saved }));
         return saved;
       } catch (error) {
@@ -98,7 +97,7 @@ export function usePlanData() {
   const addSubgoal = useCallback(
     async (title: string) => {
       const sortKey = computeSortKey(plan.subgoals, plan.subgoals.length);
-      const created = await goalRepository.createSubgoal({ title, sortKey });
+      const created = await planRepository.createSubgoal({ title, sortKey });
       setPlan((prev) => ({
         ...prev,
         subgoals: [...prev.subgoals, { ...created, tasks: [], loopTaskTemplates: [] }],
@@ -112,7 +111,7 @@ export function usePlanData() {
     async (subgoalId: UUID, title: string) => {
       const target = subgoalMap.get(subgoalId);
       if (!target) throw new Error("Subgoal not found");
-      const updated = await goalRepository.updateSubgoalTitle({
+      const updated = await planRepository.updateSubgoalTitle({
         subgoalId,
         title,
         expectedRevision: target.revision,
@@ -130,7 +129,7 @@ export function usePlanData() {
     async (subgoalId: UUID, manualCompleted: boolean) => {
       const target = subgoalMap.get(subgoalId);
       if (!target) throw new Error("Subgoal not found");
-      const updated = await goalRepository.setSubgoalManualCompleted({
+      const updated = await planRepository.setSubgoalManualCompleted({
         subgoalId,
         manualCompleted,
         expectedRevision: target.revision,
@@ -148,7 +147,7 @@ export function usePlanData() {
     async (subgoalId: UUID) => {
       const target = subgoalMap.get(subgoalId);
       if (!target) throw new Error("Subgoal not found");
-      await goalRepository.deleteSubgoal({
+      await planRepository.deleteSubgoal({
         subgoalId,
         expectedRevision: target.revision,
       });
@@ -163,7 +162,7 @@ export function usePlanData() {
   const moveSubgoal = useCallback(
     async (subgoalId: UUID, targetIndex: number) => {
       const nextSortKey = computeSortKey(plan.subgoals, targetIndex);
-      const updated = await goalRepository.moveSubgoal({
+      const updated = await planRepository.moveSubgoal({
         subgoalId,
         targetSortKey: nextSortKey,
       });
@@ -189,7 +188,7 @@ export function usePlanData() {
       if (!subgoal) throw new Error("Subgoal not found");
       const list = isLoopTemplate ? subgoal.loopTaskTemplates : subgoal.tasks;
       const sortKey = computeSortKey(list, list.length);
-      const created = await taskRepository.createPlanItem({
+      const created = await planRepository.createPlanItem({
         subgoalId,
         title,
         sortKey,
@@ -227,7 +226,7 @@ export function usePlanData() {
         : subgoal.tasks.find((t) => t.id === itemId);
       if (!current) throw new Error("Item not found");
 
-      const updated = await taskRepository.updatePlanItemTitle({
+      const updated = await planRepository.updatePlanItemTitle({
         itemId,
         title,
         isLoopTemplate,
@@ -270,7 +269,7 @@ export function usePlanData() {
         : subgoal.tasks.find((t) => t.id === itemId);
       if (!current) throw new Error("Item not found");
 
-      await taskRepository.deletePlanItem({
+      await planRepository.deletePlanItem({
         itemId,
         subgoalId,
         isLoopTemplate,
@@ -302,7 +301,7 @@ export function usePlanData() {
       const list = isLoopTemplate ? subgoal.loopTaskTemplates : subgoal.tasks;
       const nextSortKey = computeSortKey(list, targetIndex);
 
-      const updated = await taskRepository.movePlanItem({
+      const updated = await planRepository.movePlanItem({
         itemId,
         subgoalId,
         targetSortKey: nextSortKey,
@@ -329,7 +328,7 @@ export function usePlanData() {
     const subgoal = subgoalMap.get(subgoalId);
     if (!subgoal) throw new Error("Subgoal not found");
 
-    const createdTask = await taskRepository.convertLoopTemplateToTask({
+    const createdTask = await planRepository.convertLoopTemplateToTask({
       loopTemplateId,
     });
 
@@ -354,7 +353,7 @@ export function usePlanData() {
       const target = subgoal.loopTaskTemplates.find((t) => t.id === loopTemplateId);
       if (!target) throw new Error("Loop task template not found");
 
-      const updated = await taskRepository.setLoopTemplateActive({
+      const updated = await planRepository.setLoopTemplateActive({
         loopTemplateId,
         isActive,
         expectedRevision: target.revision,
