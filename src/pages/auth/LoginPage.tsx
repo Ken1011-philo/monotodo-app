@@ -1,11 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
-import { FormEvent, useEffect, useState } from "react";
-import {
-  Link,
-  type Location,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { type FormEvent, useEffect, useState } from "react";
+import { type Location, useLocation, useNavigate } from "react-router-dom";
 
 interface LoginLocationState {
   from?: Location;
@@ -73,7 +68,7 @@ export default function LoginPage() {
 
     setStatus("done");
     setMessage(
-      "メールを確認してください。届いたリンクからMonoToDoに戻ると自動でログインできます。"
+      "メールを確認してください。届いたリンクからMonoToDoに戻ると自動でログインできます。",
     );
   };
 
@@ -123,15 +118,7 @@ export default function LoginPage() {
         )}
         <p className="text-sm text-muted-foreground">{message}</p>
 
-        <footer className="space-y-2 text-sm text-muted-foreground">
-          <p>同じメールでリンクを受け取るとアカウントが自動作成されます。</p>
-          <Link
-            to="/"
-            className="font-semibold text-primary underline-offset-4 hover:underline"
-          >
-            Do ページへ戻る
-          </Link>
-        </footer>
+        <footer className="space-y-2 text-sm text-muted-foreground"></footer>
       </div>
     </div>
   );

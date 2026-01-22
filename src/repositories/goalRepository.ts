@@ -217,19 +217,38 @@ export const goalRepository = {
     expectedRevision: number | null;
   }): Promise<Goal> {
     const goalId = await getOrCreateGoalId();
-    let query = supabase
-      .from("goals")
-      .update({ title: input.title })
-      .eq("id", goalId);
+    const { data, error } = await supabase
+      .rpc("monotodo_update_goal_title", {
+        p_title: input.title,
+        p_expected_revision: input.expectedRevision ?? null,
+      })
+      .single();
 
-    if (input.expectedRevision != null) {
-      query = query.eq("revision", input.expectedRevision);
-    }
-
-    const { data, error } = await query.select("*").single();
     if (error) {
+      const isConflict =
+        error.message?.includes("MONOTODO_CONFLICT") ||
+        error.details?.includes("MONOTODO_CONFLICT") ||
+        error.code === "P0001";
+
+      if (isConflict) {
+        const { data: current, error: fetchError } = await supabase
+          .from("goals")
+          .select("*")
+          .eq("id", goalId)
+          .single();
+
+        if (fetchError) {
+          throw new Error(`Failed to reload goal after conflict: ${fetchError.message}`);
+        }
+
+        throw new Error(
+          `Failed to save goal title: conflict detected (current revision ${current.revision})`
+        );
+      }
+
       throw new Error(`Failed to save goal title: ${error.message}`);
     }
+
     return mapGoal(data as GoalRow);
   },
 

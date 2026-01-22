@@ -13,35 +13,22 @@ export const router = createBrowserRouter([
     path: "/login",
     element: <LoginPage />,
   },
-  // NOTE: 本番では RequireAuth でラップするが、検証中はコメントアウトして全ページを直接確認できるようにする
-  // {
-  //   element: <RequireAuth />,
-  //   children: [
-  //     {
-  //       element: <AppLayout />,
-  //       children: [
-  //         { path: "/", element: <DoPage /> },
-  //         { path: "/plan", element: <PlanPage /> },
-  //         { path: "/setting", element: <SettingPage /> },
-  //       ],
-  //     },
-  //     {
-  //       element: <FocusLayout />,
-  //       children: [{ path: "/focus", element: <FocusPage /> }],
-  //     },
-  //   ],
-  // },
   {
-    element: <AppLayout />,
+    element: <RequireAuth />,
     children: [
-      { path: "/", element: <DoPage /> },
-      { path: "/plan", element: <PlanPage /> },
-      { path: "/setting", element: <SettingPage /> },
+      {
+        element: <AppLayout />,
+        children: [
+          { path: "/", element: <DoPage /> },
+          { path: "/plan", element: <PlanPage /> },
+          { path: "/setting", element: <SettingPage /> },
+        ],
+      },
+      {
+        element: <FocusLayout />,
+        children: [{ path: "/focus", element: <FocusPage /> }],
+      },
     ],
-  },
-  {
-    element: <FocusLayout />,
-    children: [{ path: "/focus", element: <FocusPage /> }],
   },
   {
     path: "*",
