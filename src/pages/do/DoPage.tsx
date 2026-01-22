@@ -1,45 +1,345 @@
-import { Link } from "react-router-dom";
+// src/pages/do/DoPage.tsx
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { useDoPageData } from "../../features/do/hooks/useDoPageData";
+import type { DoRepo, NextTask, TodayStats } from "../../types/domain";
+import { doRepository } from "../../repositories/doRepository";
 
-export default function DoPage() {
-  return (
-    <section className="space-y-8 rounded-3xl border border-border/80 bg-card/60 p-8 shadow-sm">
-      <header className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-          今やる一つだけに集中
-        </p>
-        <h1 className="text-3xl font-semibold">Do</h1>
-        <p className="text-sm text-muted-foreground">
-          Supabase RPC から取得した「次のタスク」がここに表示される予定です。まだ
-          repository / hooks が未実装なので、先にルーティングを整備しておきます。
-        </p>
-      </header>
+/* =========================================================
+ * 開発用 in-memory リポジトリ（DoRepo契約に合わせて NextTask を返す）
+ * =======================================================*/
+const inMemoryRepo: DoRepo = (() => {
+  let tasks: NextTask[] = [];
 
-      <div className="flex flex-wrap gap-3">
-        <Link
-          to="/focus"
-          className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-        >
-          Focus を開始する
-        </Link>
-        <Link
-          to="/plan"
-          className="inline-flex items-center justify-center rounded-full border border-border px-6 py-2 text-sm font-semibold text-primary transition hover:bg-muted"
-        >
-          Plan でブロックを編集
-        </Link>
+  const getNextTask = async () => {
+    const sorted = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
+    return sorted[0] ?? null;
+  };
+
+  const getTodayStats = async (): Promise<TodayStats> => {
+    // dev用：完了数を持たないので0扱い（必要ならseed側にcompletedCountを持たせて拡張）
+    const totalTasks = tasks.length;
+    const completedTasks = 0;
+    return { totalTasks, completedTasks };
+  };
+
+  if (typeof window !== "undefined") {
+    // @ts-expect-error dev helper
+    window.__seedDoTasks = (seed: NextTask[]) => {
+      tasks = [...seed];
+      console.log("[Do/dev] seeded tasks:", tasks);
+    };
+  }
+
+  return {
+    getNextTask,
+    getTodayStats,
+  };
+})();
+
+/* =========================================================
+ * メインコンポーネント
+ * =======================================================*/
+
+export const DoPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  const { state, reload } = useDoPageData(doRepository);
+
+  if (state.status === "loading") {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-background">
+        <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+          <NowCardSkeleton />
+          <TodayCardSkeleton />
+        </main>
       </div>
+    );
+  }
 
-      <section className="space-y-4 rounded-2xl border border-dashed border-border px-6 py-5">
-        <h2 className="text-xl font-semibold">空状態ルール</h2>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>E1: サブゴールが無い場合は Plan へ誘導</li>
-          <li>E2: 通常タスク 0 件の時も Plan へ誘導</li>
-          <li>E3: 未完了タスクがなければ完了メッセージを表示</li>
-        </ul>
-        <p className="text-sm text-muted-foreground">
-          上記ロジックは <code>useDoPageData</code> 実装時に Supabase RPC と整合するよう調整します。
+  if (state.status === "error") {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-background">
+        <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+          <ErrorCard
+            message={state.error ?? "タスク情報の取得に失敗しました。"}
+            onRetry={reload}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // status === "ready"
+  const task = state.task; // NextTask | null
+  const stats = state.stats; // TodayStats | null
+
+  const handleStart = () => {
+    if (!task) return;
+    navigate(`/focus?taskId=${encodeURIComponent(task.id)}`);
+  };
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-background">
+      <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+        {task ? <NowCard task={task} onStart={handleStart} /> : <EmptyNowCard />}
+        {stats && <TodayCard stats={stats} />}
+      </main>
+    </div>
+  );
+};
+
+/* =========================================================
+ * 「今やるタスク」カード（NextTask前提）
+ * =======================================================*/
+
+interface NowCardProps {
+  task: NextTask;
+  onStart: () => void;
+}
+
+const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
+  const progress = Math.max(0, Math.min(100, task.subgoalProgress ?? 0));
+
+  return (
+    <section
+      className="
+        rounded-2xl border border-border
+        bg-card/90
+        shadow-[0_18px_45px_rgba(0,0,0,0.18)]
+      "
+    >
+      <div className="px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
+        <h2 className="mb-2 text-[1.35rem] font-semibold text-card-foreground">
+          今やるタスク
+        </h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          いま集中するタスクはこれだけです。
         </p>
-      </section>
+
+        <div className="mb-3">
+          <p className="mb-1 text-sm font-medium text-card-foreground">
+            サブゴール
+          </p>
+          <p className="text-base text-card-foreground">{task.subgoalTitle}</p>
+        </div>
+
+        <div className="mb-3">
+          <p className="mb-1 text-sm font-medium text-card-foreground">
+            タスク名
+          </p>
+          <p className="text-base text-card-foreground">{task.title}</p>
+        </div>
+
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex-1 overflow-hidden rounded-full bg-muted h-2">
+            <div
+              className="
+                h-full rounded-full bg-primary
+                transition-[width] duration-150 ease-out
+              "
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground">{progress} %</span>
+        </div>
+
+        <div className="mt-1 flex flex-wrap gap-2.5 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={onStart}
+            className="
+              inline-flex items-center justify-center
+              rounded-full
+              bg-primary px-4 py-2
+              text-sm font-medium text-primary-foreground
+              shadow-sm
+              hover:bg-primary/90
+              focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-primary focus-visible:ring-offset-2
+              disabled:pointer-events-none disabled:opacity-60
+              w-full sm:w-auto
+            "
+          >
+            タスク開始
+          </button>
+        </div>
+      </div>
     </section>
   );
+};
+
+/* =========================================================
+ * タスクが無いときのカード
+ * =======================================================*/
+
+const EmptyNowCard: React.FC = () => (
+  <section
+    className="
+      rounded-2xl border border-border
+      bg-card/90
+      shadow-[0_18px_45px_rgba(0,0,0,0.18)]
+    "
+  >
+    <div className="px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
+      <h2 className="mb-2 text-[1.35rem] font-semibold text-card-foreground">
+        今やるタスクはありません
+      </h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        今日やるタスクは Plan ページで決めてください。
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Plan で「今日やる」を設定すると、ここに 1 件だけ表示されます。
+      </p>
+    </div>
+  </section>
+);
+
+/* =========================================================
+ * 今日の記録カード（TodayStats前提）
+ * =======================================================*/
+interface TodayCardProps {
+  stats: TodayStats;
 }
+
+const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
+  const { totalTasks, completedTasks } = stats;
+  const rate =
+    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  return (
+    <section
+      className="
+        rounded-2xl border border-border
+        bg-card/95
+        px-6 py-5
+      "
+    >
+      <h2 className="mb-3 text-[1.05rem] font-semibold text-card-foreground">
+        今日の記録
+      </h2>
+
+      <div
+        className="
+          grid grid-cols-1 gap-2.5
+          sm:grid-cols-2
+          lg:grid-cols-3
+        "
+      >
+        <div className="rounded-md bg-muted px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">今日のタスク</p>
+          <p className="text-sm font-medium text-card-foreground">
+            {totalTasks} 個
+          </p>
+        </div>
+
+        <div className="rounded-md bg-muted px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">完了したタスク</p>
+          <p className="text-sm font-medium text-card-foreground">
+            {completedTasks} 個
+          </p>
+        </div>
+
+        <div className="rounded-md bg-muted px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">タスク完了率</p>
+          <p className="text-sm font-medium text-card-foreground">{rate} %</p>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+/* =========================================================
+ * ローディング用スケルトン
+ * =======================================================*/
+
+const NowCardSkeleton: React.FC = () => (
+  <section
+    className="
+      rounded-2xl border border-border
+      bg-card/90
+      shadow-[0_18px_45px_rgba(0,0,0,0.18)]
+      animate-pulse
+    "
+  >
+    <div className="space-y-3 px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
+      <div className="h-4 w-1/3 rounded-full bg-muted" />
+      <div className="h-3 w-1/2 rounded-full bg-muted" />
+      <div className="mt-3 h-2 w-full rounded-full bg-muted" />
+      <div className="flex flex-wrap gap-2.5 pt-2">
+        <div className="h-9 w-28 rounded-full bg-muted" />
+        <div className="h-9 w-28 rounded-full bg-muted" />
+        <div className="h-9 w-28 rounded-full bg-muted" />
+      </div>
+    </div>
+  </section>
+);
+
+const TodayCardSkeleton: React.FC = () => (
+  <section
+    className="
+      rounded-2xl border border-border
+      bg-card/95
+      px-6 py-5
+      animate-pulse
+    "
+  >
+    <div className="mb-3 h-4 w-32 rounded-full bg-muted" />
+    <div
+      className="
+        grid grid-cols-1 gap-2.5
+        sm:grid-cols-2
+        lg:grid-cols-3
+      "
+    >
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="space-y-2 rounded-md bg-muted px-3 py-2.5">
+          <div className="h-3 w-1/2 rounded-full bg-background/60" />
+          <div className="h-4 w-1/3 rounded-full bg-background/60" />
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
+/* =========================================================
+ * エラー表示カード
+ * =======================================================*/
+
+interface ErrorCardProps {
+  message: string;
+  onRetry: () => void;
+}
+
+const ErrorCard: React.FC<ErrorCardProps> = ({ message, onRetry }) => (
+  <section
+    className="
+      rounded-2xl border border-destructive/40
+      bg-destructive/10
+      px-6 py-5
+    "
+  >
+    <h2 className="mb-2 text-[1.05rem] font-semibold text-destructive">
+      読み込みエラー
+    </h2>
+    <p className="mb-4 text-sm text-destructive">{message}</p>
+    <button
+      type="button"
+      onClick={onRetry}
+      className="
+        inline-flex items-center justify-center
+        rounded-full
+        bg-destructive px-4 py-2
+        text-sm font-medium text-destructive-foreground
+        shadow-sm
+        hover:bg-destructive/90
+        focus-visible:outline-none focus-visible:ring-2
+        focus-visible:ring-destructive focus-visible:ring-offset-2
+      "
+    >
+      もう一度読み込む
+    </button>
+  </section>
+);
+
+export default DoPage;
