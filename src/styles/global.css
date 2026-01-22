@@ -109,6 +109,12 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.focus-progress text {
+  dominant-baseline: middle;
+  text-anchor: middle;
+  transform: translateY(2px);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
