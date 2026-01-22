@@ -5,7 +5,6 @@ import type {
   Goal,
   LoopTaskTemplate,
   PlanSubgoalNode,
-  Subgoal,
   Task,
   UUID,
 } from "@/types/domain";
@@ -86,12 +85,15 @@ export function usePlanData() {
         const message =
           error instanceof Error ? error.message : "Failed to save goal title";
         setError(message);
+        if (message.toLowerCase().includes("conflict")) {
+          await loadPlan();
+        }
         throw error;
       } finally {
         setStatus((prev) => ({ ...prev, savingGoal: false }));
       }
     },
-    [plan.goal, setError]
+    [plan.goal, setError, loadPlan]
   );
 
   const addSubgoal = useCallback(
