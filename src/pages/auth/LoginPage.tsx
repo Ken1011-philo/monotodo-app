@@ -1,13 +1,12 @@
 import { supabase } from "@/lib/supabaseClient";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { type Location, useLocation, useNavigate } from "react-router-dom";
+import { type Location, Link, useLocation, useNavigate } from "react-router-dom";
 
 interface LoginLocationState {
   from?: Location;
 }
 
-const defaultMessage =
-  "メールアドレスとパスワードでログインします。";
+const defaultMessage = "メールアドレスとパスワードでログインします。";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -22,10 +21,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState(defaultMessage);
   const [error, setError] = useState<string | null>(null);
 
-  const disabled = useMemo(
-    () => status === "loading",
-    [status],
-  );
+  const disabled = useMemo(() => status === "loading", [status]);
 
   useEffect(() => {
     let active = true;
@@ -72,13 +68,11 @@ export default function LoginPage() {
       return;
     }
 
-    // セッションが取れていれば onAuthStateChange でも遷移するが、明示的に遷移しておく
     if (data.session) {
       navigate(redirectPath, { replace: true });
       return;
     }
 
-    // ここに来るのは稀だが、念のため
     setStatus("idle");
     setError("ログインに成功しましたが、セッションを取得できませんでした。");
   };
@@ -136,6 +130,16 @@ export default function LoginPage() {
           >
             {status === "loading" ? "ログイン中..." : "ログイン"}
           </button>
+
+          {/* 追加：新規登録導線 */}
+          <div className="pt-1">
+            <Link
+              to="/signup"
+              className="block w-full rounded-2xl border border-border bg-background px-4 py-3 text-center text-sm font-semibold transition hover:bg-secondary/40"
+            >
+              新規登録
+            </Link>
+          </div>
         </form>
 
         {error && (
