@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { type Location, useLocation, useNavigate } from "react-router-dom";
 
 interface LoginLocationState {
@@ -7,7 +7,7 @@ interface LoginLocationState {
 }
 
 const defaultMessage =
-  "入力したメールアドレス宛にサインイン用のマジックリンクを送信します。";
+  "メールアドレスとパスワードでログインします。";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,9 +16,16 @@ export default function LoginPage() {
   const redirectPath = locationState?.from?.pathname ?? "/";
 
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
+  const [password, setPassword] = useState("");
+
+  const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [message, setMessage] = useState(defaultMessage);
   const [error, setError] = useState<string | null>(null);
+
+  const disabled = useMemo(
+    () => status === "loading",
+    [status],
+  );
 
   useEffect(() => {
     let active = true;
@@ -47,17 +54,16 @@ export default function LoginPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
     setStatus("loading");
     setError(null);
     setMessage(defaultMessage);
 
     const emailValue = email.trim().toLowerCase();
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: emailValue,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+      password,
     });
 
     if (error) {
@@ -66,10 +72,15 @@ export default function LoginPage() {
       return;
     }
 
-    setStatus("done");
-    setMessage(
-      "メールを確認してください。届いたリンクからMonoToDoに戻ると自動でログインできます。",
-    );
+    // セッションが取れていれば onAuthStateChange でも遷移するが、明示的に遷移しておく
+    if (data.session) {
+      navigate(redirectPath, { replace: true });
+      return;
+    }
+
+    // ここに来るのは稀だが、念のため
+    setStatus("idle");
+    setError("ログインに成功しましたが、セッションを取得できませんでした。");
   };
 
   return (
@@ -81,9 +92,9 @@ export default function LoginPage() {
           </p>
           <h1 className="text-3xl font-semibold">ログイン</h1>
           <p className="text-sm text-muted-foreground">
-            {status === "done"
-              ? "メール送信が完了しました。受信トレイからリンクをご確認ください。"
-              : "Supabase 認証でマジックリンクを送信します。"}
+            {status === "loading"
+              ? "ログインしています..."
+              : "Supabase 認証でメールアドレスとパスワードを確認します。"}
           </p>
         </header>
 
@@ -97,17 +108,33 @@ export default function LoginPage() {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
               required
-              disabled={status === "loading" || status === "done"}
+              disabled={disabled}
+              autoComplete="email"
+              className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-base shadow-inner focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="space-y-2 text-sm font-medium">
+            パスワード
+            <input
+              type="password"
+              name="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="••••••••"
+              required
+              disabled={disabled}
+              autoComplete="current-password"
               className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-base shadow-inner focus:border-primary focus:outline-none"
             />
           </label>
 
           <button
             type="submit"
-            disabled={!email || status === "loading" || status === "done"}
+            disabled={!email || !password || disabled}
             className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
           >
-            {status === "loading" ? "送信中..." : "マジックリンクを送信"}
+            {status === "loading" ? "ログイン中..." : "ログイン"}
           </button>
         </form>
 
