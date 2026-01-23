@@ -2,40 +2,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useDoPageData } from "../../features/do/hooks/useDoPageData";
-import type { DoRepo, NextTask, TodayStats } from "../../types/domain";
 import { doRepository } from "../../repositories/doRepository";
+import type { NextTask, TodayStats } from "../../types/domain";
 
-/* =========================================================
- * 開発用 in-memory リポジトリ（DoRepo契約に合わせて NextTask を返す）
- * =======================================================*/
-const inMemoryRepo: DoRepo = (() => {
-  let tasks: NextTask[] = [];
 
-  const getNextTask = async () => {
-    const sorted = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
-    return sorted[0] ?? null;
-  };
-
-  const getTodayStats = async (): Promise<TodayStats> => {
-    // dev用：完了数を持たないので0扱い（必要ならseed側にcompletedCountを持たせて拡張）
-    const totalTasks = tasks.length;
-    const completedTasks = 0;
-    return { totalTasks, completedTasks };
-  };
-
-  if (typeof window !== "undefined") {
-    // @ts-expect-error dev helper
-    window.__seedDoTasks = (seed: NextTask[]) => {
-      tasks = [...seed];
-      console.log("[Do/dev] seeded tasks:", tasks);
-    };
-  }
-
-  return {
-    getNextTask,
-    getTodayStats,
-  };
-})();
 
 /* =========================================================
  * メインコンポーネント
