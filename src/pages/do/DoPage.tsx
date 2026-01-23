@@ -5,8 +5,6 @@ import { useDoPageData } from "../../features/do/hooks/useDoPageData";
 import { doRepository } from "../../repositories/doRepository";
 import type { NextTask, TodayStats } from "../../types/domain";
 
-
-
 /* =========================================================
  * メインコンポーネント
  * =======================================================*/
@@ -72,63 +70,69 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
   const progress = Math.max(0, Math.min(100, task.subgoalProgress ?? 0));
 
   return (
-    <section
-      className="
-        rounded-2xl border border-border
-        bg-card/90
-        shadow-[0_18px_45px_rgba(0,0,0,0.18)]
-      "
-    >
-      <div className="px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
-        <h2 className="mb-2 text-[1.35rem] font-semibold text-card-foreground">
+    <section className="rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
+      <header className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+          Now
+        </p>
+        <h2 className="text-2xl font-semibold text-card-foreground">
           今やるタスク
         </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           いま集中するタスクはこれだけです。
         </p>
+      </header>
 
-        <div className="mb-3">
-          <p className="mb-1 text-sm font-medium text-card-foreground">
-            サブゴール
+      <div className="mt-6 space-y-5">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            Subgoal
           </p>
-          <p className="text-base text-card-foreground">{task.subgoalTitle}</p>
+          <p className="text-xl font-semibold text-card-foreground">
+            {task.subgoalTitle}
+          </p>
         </div>
 
-        <div className="mb-3">
-          <p className="mb-1 text-sm font-medium text-card-foreground">
-            タスク名
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            Task
           </p>
-          <p className="text-base text-card-foreground">{task.title}</p>
+          <p className="text-xl font-semibold text-card-foreground">
+            {task.title}
+          </p>
         </div>
 
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex-1 overflow-hidden rounded-full bg-muted h-2">
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+              Subgoal Progress
+            </p>
+            <span className="text-xs font-mono text-muted-foreground">
+              {progress}%
+            </span>
+          </div>
+
+          <div className="h-2.5 overflow-hidden rounded-full bg-muted">
             <div
-              className="
-                h-full rounded-full bg-primary
-                transition-[width] duration-150 ease-out
-              "
+              className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="text-xs text-muted-foreground">{progress} %</span>
         </div>
 
-        <div className="mt-1 flex flex-wrap gap-2.5 sm:flex-row sm:items-center">
+        <div className="pt-2">
           <button
             type="button"
             onClick={onStart}
             className="
-              inline-flex items-center justify-center
-              rounded-full
-              bg-primary px-4 py-2
+              inline-flex w-full items-center justify-center
+              rounded-full bg-primary px-6 py-2.5
               text-sm font-medium text-primary-foreground
-              shadow-sm
-              hover:bg-primary/90
+              shadow-sm hover:bg-primary/90
               focus-visible:outline-none focus-visible:ring-2
-              focus-visible:ring-primary focus-visible:ring-offset-2
+              focus-visible:ring-ring/70 focus-visible:ring-offset-2
               disabled:pointer-events-none disabled:opacity-60
-              w-full sm:w-auto
+              sm:w-auto
             "
           >
             タスク開始
@@ -178,41 +182,45 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
     totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   return (
-    <section
-      className="
-        rounded-2xl border border-border
-        bg-card/95
-        px-6 py-5
-      "
-    >
-      <h2 className="mb-3 text-[1.05rem] font-semibold text-card-foreground">
-        今日の記録
-      </h2>
+    <section className="rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
+      <header className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+          Today
+        </p>
+        <h2 className="text-2xl font-semibold text-card-foreground">
+          今日の記録
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          今日の進捗サマリーです。数値だけを見て次の意思決定を軽くします。
+        </p>
+      </header>
 
-      <div
-        className="
-          grid grid-cols-1 gap-2.5
-          sm:grid-cols-2
-          lg:grid-cols-3
-        "
-      >
-        <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">今日のタスク</p>
-          <p className="text-sm font-medium text-card-foreground">
-            {totalTasks} 個
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            Total Tasks
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-card-foreground">
+            {totalTasks} <span className="text-base font-medium">個</span>
           </p>
         </div>
 
-        <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">完了したタスク</p>
-          <p className="text-sm font-medium text-card-foreground">
-            {completedTasks} 個
+        <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            Completed
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-card-foreground">
+            {completedTasks} <span className="text-base font-medium">個</span>
           </p>
         </div>
 
-        <div className="rounded-md bg-muted px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">タスク完了率</p>
-          <p className="text-sm font-medium text-card-foreground">{rate} %</p>
+        <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            Completion Rate
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-card-foreground">
+            {rate} <span className="text-base font-medium">%</span>
+          </p>
         </div>
       </div>
     </section>
