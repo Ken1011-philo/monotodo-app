@@ -12,12 +12,6 @@ export interface Goal {
   totalCompletedLoopTaskCount: number;
   currentStreak: number;
   lastAggregatedDate: string | null;
-=======
-  // 統計情報
-  currentStreak: number;
-  completedNormalTaskCount: number;
-  totalCompletedLoopTaskCount: number;
-  // 統計情報ここまで
 
   createdAt: string;
   updatedAt: string;
@@ -84,9 +78,9 @@ export interface NextTask {
   goalId: UUID;
   subgoalId: UUID;
   title: string;
-  isLoop: boolean;   // ループタスク判定用
-  subgoalTitle: string;    // 親サブゴール名
-  subgoalOrder: number;    // 並び順
+  isLoop: boolean; // ループタスク判定用
+  subgoalTitle: string; // 親サブゴール名
+  subgoalOrder: number; // 並び順
   subgoalProgress: number;
   taskOrder: number;
 }
@@ -119,7 +113,10 @@ export interface PlanRepository {
     manualCompleted: boolean;
     expectedRevision: number;
   }): Promise<Subgoal>;
-  deleteSubgoal(input: { subgoalId: UUID; expectedRevision: number }): Promise<void>;
+  deleteSubgoal(input: {
+    subgoalId: UUID;
+    expectedRevision: number;
+  }): Promise<void>;
   moveSubgoal(input: {
     subgoalId: UUID;
     targetSortKey: number;
@@ -159,7 +156,7 @@ export interface PlanRepository {
     isActive: boolean;
     expectedRevision: number;
   }): Promise<LoopTaskTemplate>;
-
+}
 export interface UserSettings {
   userId: UUID;
   focusMinutes: number;
@@ -167,5 +164,4 @@ export interface UserSettings {
   longBreakMinutes: number;
   longBreakInterval: number;
   updatedAt: string;
-
 }
