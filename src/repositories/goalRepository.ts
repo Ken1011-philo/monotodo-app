@@ -157,46 +157,57 @@ async function fetchSubgoalTree(goalId: UUID): Promise<PlanSubgoalNode[]> {
   const subgoalIds = (subgoals ?? []).map((row) => row.id);
   if (subgoalIds.length === 0) return [];
 
-  const [{ data: tasks, error: taskError }, { data: loopTemplates, error: loopError }] =
-    await Promise.all([
-      supabase
-        .from("tasks")
-        .select("*")
-        .in("subgoal_id", subgoalIds)
-        .is("deleted_at", null)
-        .order("sort_key", { ascending: true }),
-      supabase
-        .from("loop_task_templates")
-        .select("*")
-        .in("subgoal_id", subgoalIds)
-        .is("deleted_at", null)
-        .eq("is_active", true)
-        .order("sort_key", { ascending: true }),
-    ]);
+  const [
+    { data: tasks, error: taskError },
+    { data: loopTemplates, error: loopError },
+  ] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("*")
+      .in("subgoal_id", subgoalIds)
+      .is("deleted_at", null)
+      .order("sort_key", { ascending: true }),
+    supabase
+      .from("loop_task_templates")
+      .select("*")
+      .in("subgoal_id", subgoalIds)
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("sort_key", { ascending: true }),
+  ]);
 
   if (taskError) {
     throw new Error(`Failed to fetch tasks: ${taskError.message}`);
   }
   if (loopError) {
-    throw new Error(`Failed to fetch loop task templates: ${loopError.message}`);
+    throw new Error(
+      `Failed to fetch loop task templates: ${loopError.message}`,
+    );
   }
 
   return (subgoals ?? []).map((row) => {
-    const relatedTasks = (tasks ?? []).filter((task) => task.subgoal_id === row.id);
+    const relatedTasks = (tasks ?? []).filter(
+      (task) => task.subgoal_id === row.id,
+    );
     const relatedLoops = (loopTemplates ?? []).filter(
-      (loop) => loop.subgoal_id === row.id
+      (loop) => loop.subgoal_id === row.id,
     );
     const goalId = row.goal_id as UUID;
     return {
       ...mapSubgoal(row as SubgoalRow),
       tasks: relatedTasks.map((task) => mapTask(task as TaskRow, goalId)),
-      loopTaskTemplates: relatedLoops.map((loop) => mapLoopTemplate(loop as LoopTemplateRow)),
+      loopTaskTemplates: relatedLoops.map((loop) =>
+        mapLoopTemplate(loop as LoopTemplateRow),
+      ),
     };
   });
 }
 
 export const goalRepository = {
-  async fetchPlan(): Promise<{ goal: Goal | null; subgoals: PlanSubgoalNode[] }> {
+  async fetchPlan(): Promise<{
+    goal: Goal | null;
+    subgoals: PlanSubgoalNode[];
+  }> {
     const goalId = await getOrCreateGoalId();
     const { data: goalRow, error: goalError } = await supabase
       .from("goals")
@@ -238,11 +249,13 @@ export const goalRepository = {
           .single();
 
         if (fetchError) {
-          throw new Error(`Failed to reload goal after conflict: ${fetchError.message}`);
+          throw new Error(
+            `Failed to reload goal after conflict: ${fetchError.message}`,
+          );
         }
 
         throw new Error(
-          `Failed to save goal title: conflict detected (current revision ${current.revision})`
+          `Failed to save goal title: conflict detected (current revision ${current.revision})`,
         );
       }
 
@@ -252,7 +265,10 @@ export const goalRepository = {
     return mapGoal(data as GoalRow);
   },
 
-  async createSubgoal(input: { title: string; sortKey: number }): Promise<Subgoal> {
+  async createSubgoal(input: {
+    title: string;
+    sortKey: number;
+  }): Promise<Subgoal> {
     const { data, error } = await supabase
       .from("subgoals")
       .insert({
@@ -352,39 +368,3 @@ export const goalRepository = {
 };
 
 export type GoalRepository = typeof goalRepository;
-=======
-import type { Goal } from "@/types/domain";
-import { parseSupabaseError } from "@/lib/error";
-
-export const goalRepository = {
-  /**
-   * ユーザーの現在のGoal情報を取得
-   * Streakや累計完了数などのメトリクスも含む
-   */
-  async getGoal(): Promise<Goal | null> {
-    const { data, error } = await supabase
-      .from("goals")
-      .select("*")
-      .single(); // RLSにより自分のレコード1件のみが返る
-
-    if (error) {
-      // まだGoalが作成されていない場合 (PGRST116: JSON object requested, multiple (or no) rows returned)
-      if (error.code === "PGRST116") {
-        return null;
-      }
-      throw parseSupabaseError(error);
-    }
-
-    // DB(snake_case) から Domain(camelCase) への変換
-    return {
-      id: data.id,
-      title: data.title,
-      currentStreak: data.current_streak,
-      completedNormalTaskCount: data.completed_normal_task_count,
-      totalCompletedLoopTaskCount: data.total_completed_loop_task_count,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
-  },
-};
-
