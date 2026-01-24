@@ -8,34 +8,8 @@ interface LoginLocationState {
 
 const MAX_EMAIL_LEN = 254;
 
-// Supabase の再送・サインアップ直後のクールダウン目安（実際は Supabase 側メッセージに従う）
-const DEFAULT_COOLDOWN_SEC = 60;
-
 function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase().slice(0, MAX_EMAIL_LEN);
-}
-
-function extractCooldownSeconds(msg: string): number | null {
-  // Supabase: "For security purposes, you can only request this after 57 seconds."
-  const m = msg.match(/after\s+(\d+)\s+seconds?/i);
-  if (!m) return null;
-  const sec = Number(m[1]);
-  return Number.isFinite(sec) ? sec : null;
-}
-
-/**
- * emailごとに「再送可能になる時刻」を保持する。
- * - 旧メールに送った直後 → 旧メールは当然クールダウン
- * - メール修正して再登録（新メールに送信）→ 新メールもクールダウン
- * UIは「現在表示中のメール」に紐づくクールダウンを表示する。
- */
-type AvailableAtByEmail = Record<string, number>; // epoch ms
-
-function calcRemainingSec(availableAtMs: number | undefined, nowMs: number): number {
-  if (!availableAtMs) return 0;
-  const diff = availableAtMs - nowMs;
-  if (diff <= 0) return 0;
-  return Math.ceil(diff / 1000);
 }
 
 export default function SignUpPage() {
@@ -53,24 +27,13 @@ export default function SignUpPage() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
   // form: 登録フォーム
-  // verify: メール確認案内（再送・ログイン導線）
+  // verify: メール確認案内（再送は廃止）
   const [view, setView] = useState<"form" | "verify">("form");
 
   const [status, setStatus] = useState<"idle" | "loading">("idle");
-  const [resendStatus, setResendStatus] = useState<"idle" | "loading">("idle");
 
-  // emailごとの再送可能時刻（epoch ms）
-  const [availableAtByEmail, setAvailableAtByEmail] = useState<AvailableAtByEmail>({});
-
-  //  現在 verify 画面で扱うメール（※フォーム入力が変わっても verify 側はこれを基準にする）
+  // verify 画面で表示する「送信先メール」（フォーム入力が変わっても固定）
   const [verifyEmail, setVerifyEmail] = useState<string>("");
-
-  // カウントダウン用の現在時刻（1秒ごと更新）
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, []);
 
   const [message, setMessage] = useState(
     "メールアドレスとパスワードでアカウントを作成します。"
@@ -99,13 +62,6 @@ export default function SignUpPage() {
     return true;
   }, [normalizedEmail, password, passwordConfirm, confirmError, disabled]);
 
-  // verify 画面に出すクールダウン（verifyEmail に紐づく）
-  const verifyCooldownSec = useMemo(() => {
-    const key = verifyEmail;
-    if (!key) return 0;
-    return calcRemainingSec(availableAtByEmail[key], nowMs);
-  }, [verifyEmail, availableAtByEmail, nowMs]);
-
   // 既ログインならリダイレクト（LoginPage と同等）
   useEffect(() => {
     let active = true;
@@ -132,26 +88,10 @@ export default function SignUpPage() {
     };
   }, [navigate, redirectPath]);
 
-  function setCooldownForEmail(emailKey: string, sec: number) {
-    const clamped = Math.max(0, Math.floor(sec));
-    if (!emailKey || clamped <= 0) return;
-
-    const availableAt = Date.now() + clamped * 1000;
-    setAvailableAtByEmail((prev) => ({
-      ...prev,
-      [emailKey]: Math.max(prev[emailKey] ?? 0, availableAt), // より遅い方を採用
-    }));
-  }
-
-  function setDefaultCooldownForEmail(emailKey: string) {
-    setCooldownForEmail(emailKey, DEFAULT_COOLDOWN_SEC);
-  }
-
   function handleBackToForm() {
     setView("form");
     setError(null);
     setMessage("メールアドレスとパスワードでアカウントを作成します。");
-    // verifyEmail は残しても良いが、UX的には「今の入力に合わせる」方が自然なのでクリア
     setVerifyEmail("");
   }
 
@@ -161,7 +101,6 @@ export default function SignUpPage() {
 
     if (!canSubmit) return;
 
-    // normalize は submit 時に固定（verify 画面では verifyEmail を基準にする）
     const submitEmail = normalizedEmail;
 
     setStatus("loading");
@@ -174,51 +113,16 @@ export default function SignUpPage() {
 
     if (error) {
       setError(error.message);
-
-      // セキュリティ系のクールダウン文言がある場合に反映
-      const cooldown = extractCooldownSeconds(error.message);
-      if (cooldown) setCooldownForEmail(submitEmail, cooldown);
-
       setStatus("idle");
       setMessage("入力内容を確認してください。");
       return;
     }
 
-    // 成功したら verify 画面へ
+    // 成功したら verify 画面へ（再送機能は廃止）
     setVerifyEmail(submitEmail);
-    // 成功後も Supabase 側で一定時間再送できないことがあるので一旦デフォルトをセット
-    setDefaultCooldownForEmail(submitEmail);
-
     setView("verify");
     setStatus("idle");
     setMessage("確認メールを送信しました。メール認証を完了してください。");
-  }
-
-  async function handleResend() {
-    const targetEmail = verifyEmail;
-    if (!targetEmail) return;
-
-    setError(null);
-    setResendStatus("loading");
-
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email: targetEmail,
-    });
-
-    if (error) {
-      setError(error.message);
-
-      const cooldown = extractCooldownSeconds(error.message);
-      if (cooldown) setCooldownForEmail(targetEmail, cooldown);
-
-      setResendStatus("idle");
-      return;
-    }
-
-    // 成功時も一定時間クールダウン扱いにする
-    setDefaultCooldownForEmail(targetEmail);
-    setResendStatus("idle");
   }
 
   return (
@@ -305,7 +209,7 @@ export default function SignUpPage() {
           </form>
         )}
 
-        {/* 2) メール確認案内 */}
+        {/* 2) メール確認案内（再送は廃止） */}
         {view === "verify" && (
           <div className="space-y-4">
             <div className="rounded-2xl border border-border bg-background/60 px-4 py-3 text-sm">
@@ -321,23 +225,9 @@ export default function SignUpPage() {
               </ul>
 
               <p className="mt-3 text-xs text-muted-foreground">
-                メールアドレスを修正した場合、修正前のアドレスにも確認メールが送信されています。
-                修正後のアドレスで再登録すると、新しいアドレスにも送信されますが、いずれも一定時間は再送できません。
+                確認メールが届かない場合は、メールアドレスを修正して再登録してください。
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={resendStatus === "loading" || verifyCooldownSec > 0}
-              className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm font-semibold transition hover:bg-secondary/40 disabled:opacity-60"
-            >
-              {resendStatus === "loading"
-                ? "再送中..."
-                : verifyCooldownSec > 0
-                ? `再送まで ${verifyCooldownSec} 秒`
-                : "確認メールを再送する"}
-            </button>
 
             <Link
               to="/login"
