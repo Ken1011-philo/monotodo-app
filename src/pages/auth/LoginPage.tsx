@@ -1,18 +1,21 @@
 import { supabase } from "@/lib/supabaseClient";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { type Location, useLocation, useNavigate } from "react-router-dom";
+import { type Location, Link, useLocation, useNavigate } from "react-router-dom";
 
 interface LoginLocationState {
   from?: Location;
 }
 
-const defaultMessage =
-  "メールアドレスとパスワードでログインします。";
+const defaultMessage = "メールアドレスとパスワードでログインします。";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as LoginLocationState | null;
+  const authLinkState = useMemo(
+    () => (locationState?.from ? { from: locationState.from } : undefined),
+    [locationState?.from]
+  );
   const redirectPath = locationState?.from?.pathname ?? "/";
 
   const [email, setEmail] = useState("");
@@ -22,10 +25,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState(defaultMessage);
   const [error, setError] = useState<string | null>(null);
 
-  const disabled = useMemo(
-    () => status === "loading",
-    [status],
-  );
+  const disabled = status === "loading";
 
   useEffect(() => {
     let active = true;
@@ -52,61 +52,43 @@ export default function LoginPage() {
     };
   }, [navigate, redirectPath]);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-
-    setStatus("loading");
     setError(null);
-    setMessage(defaultMessage);
+    setStatus("loading");
+    setMessage("ログイン処理を実行しています...");
 
-    const emailValue = email.trim().toLowerCase();
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailValue,
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
       password,
     });
 
     if (error) {
       setError(error.message);
+      setMessage(defaultMessage);
       setStatus("idle");
       return;
     }
 
-    // セッションが取れていれば onAuthStateChange でも遷移するが、明示的に遷移しておく
-    if (data.session) {
-      navigate(redirectPath, { replace: true });
-      return;
-    }
-
-    // ここに来るのは稀だが、念のため
-    setStatus("idle");
-    setError("ログインに成功しましたが、セッションを取得できませんでした。");
-  };
+    navigate(redirectPath, { replace: true });
+  }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-secondary/40 px-4 py-12">
-      <div className="w-full max-w-lg space-y-8 rounded-3xl border border-border/60 bg-card/80 p-8 shadow-2xl backdrop-blur">
+    <div className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-xl items-center justify-center px-4 py-10">
+      <div className="w-full space-y-6 rounded-3xl border border-border bg-card/70 px-6 py-8 shadow-sm backdrop-blur">
         <header className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.4em] text-muted-foreground">
-            MonoToDo
-          </p>
-          <h1 className="text-3xl font-semibold">ログイン</h1>
-          <p className="text-sm text-muted-foreground">
-            {status === "loading"
-              ? "ログインしています..."
-              : "Supabase 認証でメールアドレスとパスワードを確認します。"}
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">ログイン</h1>
+          <p className="text-sm text-muted-foreground">{defaultMessage}</p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="space-y-2 text-sm font-medium">
-            メールアドレス
+          <label className="block space-y-2 text-sm font-medium">
+            <span className="text-muted-foreground">メールアドレス</span>
             <input
               type="email"
-              name="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
+              placeholder="your@email.com"
               required
               disabled={disabled}
               autoComplete="email"
@@ -114,11 +96,10 @@ export default function LoginPage() {
             />
           </label>
 
-          <label className="space-y-2 text-sm font-medium">
-            パスワード
+          <label className="block space-y-2 text-sm font-medium">
+            <span className="text-muted-foreground">パスワード</span>
             <input
               type="password"
-              name="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
@@ -136,6 +117,17 @@ export default function LoginPage() {
           >
             {status === "loading" ? "ログイン中..." : "ログイン"}
           </button>
+
+          {/* 新規登録導線（from を維持） */}
+          <div className="pt-1">
+            <Link
+              to="/signup"
+              state={authLinkState}
+              className="block w-full rounded-2xl border border-border bg-background px-4 py-3 text-center text-sm font-semibold transition hover:bg-secondary/40"
+            >
+              新規登録
+            </Link>
+          </div>
         </form>
 
         {error && (

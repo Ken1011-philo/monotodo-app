@@ -1,6 +1,7 @@
 import AppLayout from "@/components/layouts/AppLayout";
 import FocusLayout from "@/components/layouts/FocusLayout";
 import LoginPage from "@/pages/auth/LoginPage";
+import SignUpPage from "@/pages/auth/SignUpPage";
 import RequireAuth from "@/pages/auth/RequireAuth";
 import DoPage from "@/pages/do/DoPage";
 import FocusPage from "@/pages/focus/FocusPage";
@@ -12,6 +13,10 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginPage />,
+  },
+  {
+  path: "/signup", 
+  element: <SignUpPage />,
   },
   {
     element: <RequireAuth />,
