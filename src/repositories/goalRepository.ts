@@ -288,11 +288,11 @@ export const goalRepository = {
     expectedRevision: number;
   }): Promise<Subgoal> {
     const { data, error } = await supabase
-      .from("subgoals")
-      .update({ title: input.title })
-      .eq("id", input.subgoalId)
-      .eq("revision", input.expectedRevision)
-      .select("*")
+      .rpc("monotodo_update_subgoal_title", {
+        p_subgoal_id: input.subgoalId,
+        p_title: input.title,
+        p_expected_revision: input.expectedRevision,
+      })
       .single();
 
     if (error) {

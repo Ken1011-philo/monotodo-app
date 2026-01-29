@@ -135,3 +135,8 @@ $$;
 grant execute on function public.monotodo_create_subgoal(text, bigint) to authenticated;
 grant execute on function public.monotodo_create_task(uuid, text, bigint) to authenticated;
 grant execute on function public.monotodo_create_loop_task_template(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_update_task_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_update_loop_task_template_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_delete_task(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_delete_loop_task_template(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_update_subgoal_title(uuid, text, bigint) to authenticated;

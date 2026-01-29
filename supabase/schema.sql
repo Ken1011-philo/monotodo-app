@@ -918,6 +918,167 @@ begin
 end;
 $$;
 
+-- (A7) Subgoalタイトル更新（楽観ロック）
+create or replace function public.monotodo_update_subgoal_title(
+  p_subgoal_id uuid,
+  p_title text,
+  p_expected_revision bigint
+)
+returns public.subgoals
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.subgoals%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.subgoals
+     set title = p_title
+   where id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null
+     and revision = p_expected_revision
+   returning * into v_row;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- (A5) Task削除（tombstone）
+create or replace function public.monotodo_delete_task(
+  p_task_id uuid,
+  p_expected_revision bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.tasks
+     set deleted_at = now()
+   where id = p_task_id
+     and user_id = auth.uid()
+     and revision = p_expected_revision;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- (A6) ループテンプレ削除（停止+削除フラグ）
+create or replace function public.monotodo_delete_loop_task_template(
+  p_template_id uuid,
+  p_expected_revision bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.loop_task_templates%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.loop_task_templates
+     set deleted_at = now(),
+         is_active = false
+   where id = p_template_id
+     and user_id = auth.uid()
+     and revision = p_expected_revision;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- (A3) Taskタイトル更新（楽観ロック）
+create or replace function public.monotodo_update_task_title(
+  p_task_id uuid,
+  p_title text,
+  p_expected_revision bigint
+)
+returns public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.tasks
+     set title = p_title
+   where id = p_task_id
+     and user_id = auth.uid()
+     and deleted_at is null
+     and revision = p_expected_revision
+   returning * into v_row;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- (A4) ループテンプレタイトル更新（楽観ロック）
+create or replace function public.monotodo_update_loop_task_template_title(
+  p_template_id uuid,
+  p_title text,
+  p_expected_revision bigint
+)
+returns public.loop_task_templates
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.loop_task_templates%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.loop_task_templates
+     set title = p_title
+   where id = p_template_id
+     and user_id = auth.uid()
+     and deleted_at is null
+     and revision = p_expected_revision
+   returning * into v_row;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
 -- (A) 次タスク（Doページ）
 create or replace function public.monotodo_select_next_task()
 returns table(
@@ -1502,6 +1663,11 @@ grant execute on function public.monotodo_reset_goal() to authenticated;
 grant execute on function public.monotodo_create_subgoal(text, bigint) to authenticated;
 grant execute on function public.monotodo_create_task(uuid, text, bigint) to authenticated;
 grant execute on function public.monotodo_create_loop_task_template(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_update_task_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_update_loop_task_template_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_delete_task(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_delete_loop_task_template(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_update_subgoal_title(uuid, text, bigint) to authenticated;
 
 -- =====================================================
 -- END

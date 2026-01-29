@@ -228,38 +228,46 @@ export function usePlanData() {
         : subgoal.tasks.find((t) => t.id === itemId);
       if (!current) throw new Error("Item not found");
 
-      const updated = await planRepository.updatePlanItemTitle({
-        itemId,
-        title,
-        isLoopTemplate,
-        expectedRevision: current.revision,
-      });
+      try {
+        const updated = await planRepository.updatePlanItemTitle({
+          itemId,
+          title,
+          isLoopTemplate,
+          expectedRevision: current.revision,
+        });
 
-      setPlan((prev) => ({
-        ...prev,
-        subgoals: prev.subgoals.map((s) => {
-          if (s.id !== subgoalId) return s;
-          if (isLoopTemplate) {
+        setPlan((prev) => ({
+          ...prev,
+          subgoals: prev.subgoals.map((s) => {
+            if (s.id !== subgoalId) return s;
+            if (isLoopTemplate) {
+              return {
+                ...s,
+                loopTaskTemplates: s.loopTaskTemplates.map((t) =>
+                  t.id === itemId ? (updated as LoopTaskTemplate) : t
+                ),
+              };
+            }
+            const taskWithGoal: Task = {
+              ...(updated as Task),
+              goalId: subgoal.goalId,
+            };
             return {
               ...s,
-              loopTaskTemplates: s.loopTaskTemplates.map((t) =>
-                t.id === itemId ? (updated as LoopTaskTemplate) : t
-              ),
+              tasks: s.tasks.map((t) => (t.id === itemId ? taskWithGoal : t)),
             };
-          }
-          const taskWithGoal: Task = {
-            ...(updated as Task),
-            goalId: subgoal.goalId,
-          };
-          return {
-            ...s,
-            tasks: s.tasks.map((t) => (t.id === itemId ? taskWithGoal : t)),
-          };
-        }),
-      }));
-      return updated;
+          }),
+        }));
+        return updated;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("MONOTODO_CONFLICT")) {
+          await loadPlan();
+        }
+        throw error;
+      }
     },
-    [subgoalMap]
+    [subgoalMap, loadPlan]
   );
 
   const deletePlanItem = useCallback(

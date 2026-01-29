@@ -114,11 +114,11 @@ export const taskRepository = {
   }): Promise<Task | LoopTaskTemplate> {
     if (input.isLoopTemplate) {
       const { data, error } = await supabase
-        .from("loop_task_templates")
-        .update({ title: input.title })
-        .eq("id", input.itemId)
-        .eq("revision", input.expectedRevision)
-        .select("*")
+        .rpc("monotodo_update_loop_task_template_title", {
+          p_template_id: input.itemId,
+          p_title: input.title,
+          p_expected_revision: input.expectedRevision,
+        })
         .single();
 
       if (error) {
@@ -128,11 +128,11 @@ export const taskRepository = {
     }
 
     const { data, error } = await supabase
-      .from("tasks")
-      .update({ title: input.title })
-      .eq("id", input.itemId)
-      .eq("revision", input.expectedRevision)
-      .select("*")
+      .rpc("monotodo_update_task_title", {
+        p_task_id: input.itemId,
+        p_title: input.title,
+        p_expected_revision: input.expectedRevision,
+      })
       .single();
 
     if (error) {
@@ -199,18 +199,20 @@ export const taskRepository = {
     isLoopTemplate: boolean;
     expectedRevision: number;
   }): Promise<void> {
-    const deleted_at = new Date().toISOString();
-    const table = input.isLoopTemplate ? "loop_task_templates" : "tasks";
-
-    const { error } = await supabase
-      .from(table)
-      .update({ deleted_at })
-      .eq("id", input.itemId)
-      .eq("revision", input.expectedRevision);
-
-    if (error) {
-      throw new Error(`Failed to delete item: ${error.message}`);
+    if (input.isLoopTemplate) {
+      const { error } = await supabase.rpc("monotodo_delete_loop_task_template", {
+        p_template_id: input.itemId,
+        p_expected_revision: input.expectedRevision,
+      });
+      if (error) throw new Error(`Failed to delete item: ${error.message}`);
+      return;
     }
+
+    const { error } = await supabase.rpc("monotodo_delete_task", {
+      p_task_id: input.itemId,
+      p_expected_revision: input.expectedRevision,
+    });
+    if (error) throw new Error(`Failed to delete item: ${error.message}`);
   },
 
   async convertLoopTemplateToTask(input: {
