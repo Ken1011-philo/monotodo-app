@@ -952,6 +952,123 @@ begin
 end;
 $$;
 
+-- (A8) Subgoal 並び替え
+create or replace function public.monotodo_move_subgoal(
+  p_subgoal_id uuid,
+  p_target_sort_key bigint
+)
+returns setof public.subgoals
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.subgoals
+     set sort_key = p_target_sort_key
+   where id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  return query
+    select *
+      from public.subgoals
+     where user_id = auth.uid()
+       and deleted_at is null
+     order by sort_key asc, id asc;
+end;
+$$;
+
+-- (A9) Task 並び替え（同一サブゴール内）
+create or replace function public.monotodo_move_task(
+  p_task_id uuid,
+  p_target_sort_key bigint
+)
+returns setof public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_subgoal_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  select subgoal_id into v_subgoal_id
+    from public.tasks
+   where id = p_task_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  if v_subgoal_id is null then
+    raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+  end if;
+
+  update public.tasks
+     set sort_key = p_target_sort_key
+   where id = p_task_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  return query
+    select *
+      from public.tasks
+     where subgoal_id = v_subgoal_id
+       and user_id = auth.uid()
+       and deleted_at is null
+     order by sort_key asc nulls last, id asc;
+end;
+$$;
+
+-- (A10) ループテンプレ 並び替え（同一サブゴール内）
+create or replace function public.monotodo_move_loop_task_template(
+  p_template_id uuid,
+  p_target_sort_key bigint
+)
+returns setof public.loop_task_templates
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_subgoal_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  select subgoal_id into v_subgoal_id
+    from public.loop_task_templates
+   where id = p_template_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  if v_subgoal_id is null then
+    raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+  end if;
+
+  update public.loop_task_templates
+     set sort_key = p_target_sort_key
+   where id = p_template_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  return query
+    select *
+      from public.loop_task_templates
+     where subgoal_id = v_subgoal_id
+       and user_id = auth.uid()
+       and deleted_at is null
+       and is_active = true
+     order by sort_key asc, id asc;
+end;
+$$;
+
 -- (A5) Task削除（tombstone）
 create or replace function public.monotodo_delete_task(
   p_task_id uuid,
@@ -1668,6 +1785,9 @@ grant execute on function public.monotodo_update_loop_task_template_title(uuid, 
 grant execute on function public.monotodo_delete_task(uuid, bigint) to authenticated;
 grant execute on function public.monotodo_delete_loop_task_template(uuid, bigint) to authenticated;
 grant execute on function public.monotodo_update_subgoal_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_move_subgoal(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_move_task(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_move_loop_task_template(uuid, bigint) to authenticated;
 
 -- =====================================================
 -- END

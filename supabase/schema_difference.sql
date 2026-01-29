@@ -140,3 +140,6 @@ grant execute on function public.monotodo_update_loop_task_template_title(uuid, 
 grant execute on function public.monotodo_delete_task(uuid, bigint) to authenticated;
 grant execute on function public.monotodo_delete_loop_task_template(uuid, bigint) to authenticated;
 grant execute on function public.monotodo_update_subgoal_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_move_subgoal(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_move_task(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_move_loop_task_template(uuid, bigint) to authenticated;

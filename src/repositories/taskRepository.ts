@@ -148,49 +148,26 @@ export const taskRepository = {
     isLoopTemplate: boolean;
   }): Promise<Task[] | LoopTaskTemplate[]> {
     if (input.isLoopTemplate) {
-      const { error } = await supabase
-        .from("loop_task_templates")
-        .update({ sort_key: input.targetSortKey })
-        .eq("id", input.itemId);
+      const { data, error } = await supabase.rpc("monotodo_move_loop_task_template", {
+        p_template_id: input.itemId,
+        p_target_sort_key: input.targetSortKey,
+      });
 
       if (error) {
         throw new Error(`Failed to move loop task template: ${error.message}`);
       }
-
-      const { data, error: fetchError } = await supabase
-        .from("loop_task_templates")
-        .select("*")
-        .eq("subgoal_id", input.subgoalId)
-        .is("deleted_at", null)
-        .eq("is_active", true)
-        .order("sort_key", { ascending: true });
-
-      if (fetchError) {
-        throw new Error(`Failed to reload loop task templates: ${fetchError.message}`);
-      }
-      return (data ?? []).map((row) => mapLoopTemplate(row as LoopTemplateRow));
+      return (data ?? []).map((row: unknown) => mapLoopTemplate(row as LoopTemplateRow));
     }
 
-    const { error } = await supabase
-      .from("tasks")
-      .update({ sort_key: input.targetSortKey })
-      .eq("id", input.itemId);
+    const { data, error } = await supabase.rpc("monotodo_move_task", {
+      p_task_id: input.itemId,
+      p_target_sort_key: input.targetSortKey,
+    });
 
     if (error) {
       throw new Error(`Failed to move task: ${error.message}`);
     }
-
-    const { data, error: fetchError } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("subgoal_id", input.subgoalId)
-      .is("deleted_at", null)
-      .order("sort_key", { ascending: true });
-
-    if (fetchError) {
-      throw new Error(`Failed to reload tasks: ${fetchError.message}`);
-    }
-    return (data ?? []).map((row) => mapTask(row as TaskRow));
+    return (data ?? []).map((row: unknown) => mapTask(row as TaskRow));
   },
 
   async deletePlanItem(input: {

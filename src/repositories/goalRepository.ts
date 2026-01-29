@@ -342,26 +342,16 @@ export const goalRepository = {
     subgoalId: UUID;
     targetSortKey: number;
   }): Promise<Subgoal[]> {
-    const { error } = await supabase
-      .from("subgoals")
-      .update({ sort_key: input.targetSortKey })
-      .eq("id", input.subgoalId);
+    const { data, error } = await supabase.rpc("monotodo_move_subgoal", {
+      p_subgoal_id: input.subgoalId,
+      p_target_sort_key: input.targetSortKey,
+    });
 
     if (error) {
       throw new Error(`Failed to move subgoal: ${error.message}`);
     }
 
-    const { data: rows, error: fetchError } = await supabase
-      .from("subgoals")
-      .select("*")
-      .is("deleted_at", null)
-      .order("sort_key", { ascending: true });
-
-    if (fetchError) {
-      throw new Error(`Failed to reload subgoals: ${fetchError.message}`);
-    }
-
-    return (rows ?? []).map((row) => mapSubgoal(row as SubgoalRow));
+    return (data ?? []).map((row: unknown) => mapSubgoal(row as SubgoalRow));
   },
 };
 
