@@ -1,58 +1,41 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GripVertical, Plus, Save, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePlanData } from "@/features/plan/hooks/usePlanData";
 import { cn } from "@/lib/utils";
+import type { LoopTaskTemplate, Task, UUID } from "@/types/domain";
 
 const GOAL_TITLE_LIMIT = 255;
 const MAX_SUBGOALS = 30;
-const MAX_TASKS_PER_SUBGOAL = 30;
-
-type TaskItem = {
-  id: string;
-  title: string;
-  isLoop: boolean;
-  createdAt: number;
-};
-
-type Subgoal = {
-  id: string;
-  title: string;
-  createdAt: number;
-  tasks: TaskItem[];
-};
-
-const seededSubgoals: Subgoal[] = [
-  {
-    id: "seed-research",
-    title: "",
-    createdAt: 1,
-    tasks: [
-      {
-        id: "seed-research-1",
-        title: "",
-        isLoop: false,
-        createdAt: 1,
-      },
-      {
-        id: "seed-research-2",
-        title: "",
-        isLoop: false,
-        createdAt: 2,
-      },
-    ],
-  },
-];
-
-const createId = (prefix: string) => {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-};
+const MAX_PLAN_ITEMS = 30; // normal tasks + active loop templates
 
 export default function PlanPage() {
+  const {
+    plan,
+    status,
+    reload,
+    saveGoalTitle,
+    addSubgoal,
+    updateSubgoalTitle,
+    deleteSubgoal,
+    moveSubgoal,
+    addPlanItem,
+    updatePlanItemTitle,
+    deletePlanItem,
+    movePlanItem,
+    convertLoopTemplateToTask,
+    setLoopTemplateActive,
+  } = usePlanData();
+
+  const [goalTitle, setGoalTitle] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setGoalTitle(plan.goal?.title ?? "");
+  }, [plan.goal?.title]);
+
   return (
     <section className="space-y-8 rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
       <header className="space-y-2">
@@ -61,41 +44,67 @@ export default function PlanPage() {
         </p>
         <h1 className="text-3xl font-semibold">Goal / Subgoal 設計</h1>
         <p className="text-sm text-muted-foreground">
-          Supabase 連携前に、Plan
-          ページの入力体験を整備しています。ここで確定した情報が Do / Focus
-          へ流れます。
+          Supabase と同期しながら Plan ページの入力体験を整備しています。ここで確定した情報が Do / Focus へ流れます。
         </p>
       </header>
 
       <div className="space-y-8">
-        <GoalInputSection />
-        <SubgoalListSection />
+        <GoalInputSection
+          goalTitle={goalTitle}
+          setGoalTitle={setGoalTitle}
+          lastSavedAt={lastSavedAt}
+          setLastSavedAt={setLastSavedAt}
+          onSave={saveGoalTitle}
+          isSaving={status.savingGoal}
+        />
+        <SubgoalListSection
+          subgoals={plan.subgoals}
+          loading={status.loading}
+          error={status.error}
+          onReload={reload}
+          onAddSubgoal={addSubgoal}
+          onUpdateSubgoalTitle={updateSubgoalTitle}
+          onDeleteSubgoal={deleteSubgoal}
+          onMoveSubgoal={moveSubgoal}
+          onAddPlanItem={addPlanItem}
+          onUpdatePlanItemTitle={updatePlanItemTitle}
+          onDeletePlanItem={deletePlanItem}
+          onMovePlanItem={movePlanItem}
+          onConvertLoopTemplateToTask={convertLoopTemplateToTask}
+          onSetLoopTemplateActive={setLoopTemplateActive}
+        />
       </div>
     </section>
   );
 }
 
-function GoalInputSection() {
-  const [goalTitle, setGoalTitle] = useState("");
-  const [savedGoalTitle, setSavedGoalTitle] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+type GoalInputProps = {
+  goalTitle: string;
+  setGoalTitle: (value: string) => void;
+  lastSavedAt: Date | null;
+  setLastSavedAt: (value: Date | null) => void;
+  onSave: (title: string) => Promise<unknown>;
+  isSaving: boolean;
+};
 
+function GoalInputSection({
+  goalTitle,
+  setGoalTitle,
+  lastSavedAt,
+  setLastSavedAt,
+  onSave,
+  isSaving,
+}: GoalInputProps) {
   const goalError =
     goalTitle.length > GOAL_TITLE_LIMIT
       ? `Goalタイトルは${GOAL_TITLE_LIMIT}文字以内に収めてください`
       : null;
-  const isDirty = goalTitle !== savedGoalTitle;
 
-  function handleGoalSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleGoalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (goalError || !isDirty) return;
-    setIsSaving(true);
-    setTimeout(() => {
-      setSavedGoalTitle(goalTitle);
-      setIsSaving(false);
-      setLastSavedAt(new Date());
-    }, 200);
+    if (goalError) return;
+    await onSave(goalTitle);
+    setLastSavedAt(new Date());
   }
 
   return (
@@ -104,9 +113,7 @@ function GoalInputSection() {
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
           Goal Title
         </p>
-        <h2 className="text-2xl font-semibold">
-          達成したい 目標 をここに書きましょう
-        </h2>
+        <h2 className="text-2xl font-semibold">達成したい 目標 をここに書きましょう</h2>
         <p className="text-sm text-muted-foreground">
           ゴールは空でも構いません。ただし、目標はあいまいで短くてもやりたい事として言語化しておくのがおすすめです。
         </p>
@@ -134,29 +141,18 @@ function GoalInputSection() {
           <p className="text-xs font-medium text-destructive">{goalError}</p>
         ) : lastSavedAt ? (
           <p className="text-xs text-emerald-600">
-            {lastSavedAt.toLocaleTimeString()} にローカル保存しました
+            {lastSavedAt.toLocaleTimeString()} に保存しました
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            空欄のままでも保存可能です。
-          </p>
+          <p className="text-xs text-muted-foreground">空欄のままでも保存可能です。</p>
         )}
 
         <div className="flex flex-wrap gap-3">
-          <Button
-            type="submit"
-            disabled={!isDirty || Boolean(goalError) || isSaving}
-            className="min-w-[140px]"
-          >
+          <Button type="submit" disabled={Boolean(goalError) || isSaving} className="min-w-[140px]">
             <Save className="size-4" />
             {isSaving ? "保存中…" : "Goal を保存"}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setGoalTitle("")}
-            disabled={!goalTitle}
-          >
+          <Button type="button" variant="ghost" onClick={() => setGoalTitle("")} disabled={!goalTitle}>
             クリア
           </Button>
         </div>
@@ -165,22 +161,69 @@ function GoalInputSection() {
   );
 }
 
-function SubgoalListSection() {
-  const [subgoals, setSubgoals] = useState<Subgoal[]>(seededSubgoals);
+type SubgoalListProps = {
+  subgoals: {
+    id: UUID;
+    title: string;
+    sortKey: number;
+    completionMode: "auto" | "manual";
+    manualCompleted: boolean;
+    completed: boolean;
+    revision: number;
+    tasks: Task[];
+    loopTaskTemplates: LoopTaskTemplate[];
+    goalId: UUID;
+  }[];
+  loading: boolean;
+  error: string | null;
+  onReload: () => Promise<void>;
+  onAddSubgoal: (title: string) => Promise<unknown>;
+  onUpdateSubgoalTitle: (id: UUID, title: string) => Promise<unknown>;
+  onDeleteSubgoal: (id: UUID) => Promise<void>;
+  onMoveSubgoal: (id: UUID, targetIndex: number) => Promise<unknown>;
+  onAddPlanItem: (subgoalId: UUID, title: string, isLoopTemplate: boolean) => Promise<Task | LoopTaskTemplate>;
+  onUpdatePlanItemTitle: (
+    subgoalId: UUID,
+    itemId: UUID,
+    title: string,
+    isLoopTemplate: boolean
+  ) => Promise<Task | LoopTaskTemplate>;
+  onDeletePlanItem: (subgoalId: UUID, itemId: UUID, isLoopTemplate: boolean) => Promise<void>;
+  onMovePlanItem: (
+    subgoalId: UUID,
+    itemId: UUID,
+    targetIndex: number,
+    isLoopTemplate: boolean
+  ) => Promise<Task[] | LoopTaskTemplate[]>;
+  onConvertLoopTemplateToTask: (subgoalId: UUID, loopTemplateId: UUID) => Promise<Task>;
+  onSetLoopTemplateActive: (subgoalId: UUID, loopTemplateId: UUID, isActive: boolean) => Promise<LoopTaskTemplate>;
+};
+
+function SubgoalListSection({
+  subgoals,
+  loading,
+  error,
+  onReload,
+  onAddSubgoal,
+  onUpdateSubgoalTitle,
+  onDeleteSubgoal,
+  onMoveSubgoal,
+  onAddPlanItem,
+  onUpdatePlanItemTitle,
+  onDeletePlanItem,
+  onMovePlanItem,
+  onConvertLoopTemplateToTask,
+  onSetLoopTemplateActive,
+}: SubgoalListProps) {
   const [draftTitle, setDraftTitle] = useState("");
-  const [draggingSubgoalId, setDraggingSubgoalId] = useState<string | null>(
-    null
-  );
-  const [draggingTask, setDraggingTask] = useState<{
-    subgoalId: string;
-    taskId: string;
+  const [draggingSubgoalId, setDraggingSubgoalId] = useState<UUID | null>(null);
+  const [draggingItem, setDraggingItem] = useState<{
+    subgoalId: UUID;
+    itemId: UUID;
+    isLoopTemplate: boolean;
   } | null>(null);
-  const [pendingTaskFocusId, setPendingTaskFocusId] = useState<string | null>(
-    null
-  );
-  const taskInputRefs = useRef<Map<string, HTMLInputElement | null>>(
-    new Map<string, HTMLInputElement | null>()
-  );
+  const [pendingFocusId, setPendingFocusId] = useState<UUID | null>(null);
+  const taskInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map<string, HTMLInputElement | null>());
 
   const limitReached = subgoals.length >= MAX_SUBGOALS;
   const trimmedDraft = draftTitle.trim();
@@ -194,16 +237,16 @@ function SubgoalListSection() {
   }, [limitReached]);
 
   useEffect(() => {
-    if (!pendingTaskFocusId) return;
-    const nextInput = taskInputRefs.current.get(pendingTaskFocusId);
+    if (!pendingFocusId) return;
+    const nextInput = taskInputRefs.current.get(pendingFocusId);
     if (nextInput) {
       nextInput.focus();
       nextInput.select();
-      setPendingTaskFocusId(null);
+      setPendingFocusId(null);
     }
-  }, [pendingTaskFocusId, subgoals]);
+  }, [pendingFocusId, subgoals]);
 
-  const registerTaskInput = useCallback((taskId: string) => {
+  const registerTaskInput = (taskId: string) => {
     return (element: HTMLInputElement | null) => {
       const map = taskInputRefs.current;
       if (element) {
@@ -212,17 +255,11 @@ function SubgoalListSection() {
         map.delete(taskId);
       }
     };
-  }, []);
+  };
 
-  function addSubgoal() {
+  async function addSubgoalRow() {
     if (!canSubmitDraft) return;
-    const newSubgoal: Subgoal = {
-      id: createId("subgoal"),
-      title: trimmedDraft,
-      createdAt: Date.now(),
-      tasks: [],
-    };
-    setSubgoals((prev) => [...prev, newSubgoal]);
+    await onAddSubgoal(trimmedDraft);
     setDraftTitle("");
   }
 
@@ -234,121 +271,62 @@ function SubgoalListSection() {
     }
     if (event.nativeEvent.isComposing) return;
     event.preventDefault();
-    addSubgoal();
+    void addSubgoalRow();
   }
 
-  function handleDeleteSubgoal(id: string) {
-    setSubgoals((prev) => prev.filter((subgoal) => subgoal.id !== id));
+  async function handleUpdateSubgoalTitle(id: UUID, value: string) {
+    await onUpdateSubgoalTitle(id, value);
   }
 
-  function updateSubgoalTitle(id: string, value: string) {
-    setSubgoals((prev) =>
-      prev.map((subgoal) =>
-        subgoal.id === id ? { ...subgoal, title: value } : subgoal
-      )
-    );
+  async function handleDeleteSubgoal(id: UUID) {
+    await onDeleteSubgoal(id);
   }
 
-  function addTaskRow(subgoalId: string) {
-    let createdTaskId: string | null = null;
-    setSubgoals((prev) =>
-      prev.map((subgoal) => {
-        if (subgoal.id !== subgoalId) return subgoal;
-        if (subgoal.tasks.length >= MAX_TASKS_PER_SUBGOAL) return subgoal;
-        const newTask: TaskItem = {
-          id: createId("task"),
-          title: "",
-          isLoop: false,
-          createdAt: Date.now(),
-        };
-        createdTaskId = newTask.id;
-        return { ...subgoal, tasks: [...subgoal.tasks, newTask] };
-      })
-    );
-    if (createdTaskId) {
-      setPendingTaskFocusId(createdTaskId);
-    }
+  async function addTaskRow(subgoalId: UUID, isLoopTemplate: boolean) {
+    const subgoal = subgoals.find((s) => s.id === subgoalId);
+    if (!subgoal) return;
+    const activeCount = subgoal.tasks.length + subgoal.loopTaskTemplates.filter((lt) => lt.isActive).length;
+    if (activeCount >= MAX_PLAN_ITEMS) return;
+
+    const created = await onAddPlanItem(subgoalId, "", isLoopTemplate);
+    setPendingFocusId(created.id);
   }
 
-  function handleSubgoalTitleKeyDown(
-    event: React.KeyboardEvent<HTMLInputElement>,
-    subgoal: Subgoal
-  ) {
+  function handleSubgoalTitleKeyDown(event: React.KeyboardEvent<HTMLInputElement>, subgoal: { id: UUID }) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return;
     }
     event.preventDefault();
-    addTaskRow(subgoal.id);
+    void addTaskRow(subgoal.id, false);
   }
 
-  function handleTaskTitleChange(
-    subgoalId: string,
-    taskId: string,
-    value: string
+  async function handleItemTitleChange(
+    subgoalId: UUID,
+    itemId: UUID,
+    value: string,
+    isLoopTemplate: boolean
   ) {
-    setSubgoals((prev) =>
-      prev.map((subgoal) => {
-        if (subgoal.id !== subgoalId) return subgoal;
-        return {
-          ...subgoal,
-          tasks: subgoal.tasks.map((task) =>
-            task.id === taskId ? { ...task, title: value } : task
-          ),
-        };
-      })
-    );
+    await onUpdatePlanItemTitle(subgoalId, itemId, value, isLoopTemplate);
   }
 
-  function handleTaskKeyDown(
-    event: React.KeyboardEvent<HTMLInputElement>,
-    subgoalId: string,
-    _taskId: string
-  ) {
+  function handleTaskKeyDown(event: React.KeyboardEvent<HTMLInputElement>, subgoalId: UUID, _taskId: UUID) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return;
     }
     event.preventDefault();
-    addTaskRow(subgoalId);
+    void addTaskRow(subgoalId, false);
   }
 
-  function toggleTaskLoop(subgoalId: string, taskId: string) {
-    setSubgoals((prev) =>
-      prev.map((subgoal) => {
-        if (subgoal.id !== subgoalId) return subgoal;
-        return {
-          ...subgoal,
-          tasks: subgoal.tasks.map((task) =>
-            task.id === taskId ? { ...task, isLoop: !task.isLoop } : task
-          ),
-        };
-      })
-    );
+  async function deleteItem(subgoalId: UUID, itemId: UUID, isLoopTemplate: boolean) {
+    await onDeletePlanItem(subgoalId, itemId, isLoopTemplate);
   }
 
-  function deleteTask(subgoalId: string, taskId: string) {
-    setSubgoals((prev) =>
-      prev.map((subgoal) => {
-        if (subgoal.id !== subgoalId) return subgoal;
-        return {
-          ...subgoal,
-          tasks: subgoal.tasks.filter((task) => task.id !== taskId),
-        };
-      })
-    );
-  }
-
-  function handleSubgoalDragStart(
-    event: React.DragEvent<HTMLLIElement>,
-    id: string
-  ) {
+  function handleSubgoalDragStart(event: React.DragEvent<HTMLLIElement>, id: UUID) {
     setDraggingSubgoalId(id);
     event.dataTransfer.effectAllowed = "move";
   }
 
-  function handleSubgoalDrop(
-    event: React.DragEvent<HTMLLIElement>,
-    targetId: string
-  ) {
+  function handleSubgoalDrop(event: React.DragEvent<HTMLLIElement>, targetId: UUID) {
     event.preventDefault();
     event.stopPropagation();
     if (!draggingSubgoalId || draggingSubgoalId === targetId) {
@@ -356,91 +334,83 @@ function SubgoalListSection() {
       return;
     }
 
-    setSubgoals((prev) => {
-      const updated = [...prev];
-      const sourceIndex = updated.findIndex(
-        (item) => item.id === draggingSubgoalId
-      );
-      const targetIndex = updated.findIndex((item) => item.id === targetId);
-      if (sourceIndex === -1 || targetIndex === -1) {
-        return prev;
-      }
-      const [moved] = updated.splice(sourceIndex, 1);
-      updated.splice(targetIndex, 0, moved);
-      return updated;
-    });
+    const targetIndex = subgoals.findIndex((item) => item.id === targetId);
+    if (targetIndex !== -1) {
+      void onMoveSubgoal(draggingSubgoalId, targetIndex);
+    }
     setDraggingSubgoalId(null);
   }
 
-  function handleTaskDragStart(
+  function handleItemDragStart(
     event: React.DragEvent<HTMLLIElement>,
-    subgoalId: string,
-    taskId: string
+    subgoalId: UUID,
+    itemId: UUID,
+    isLoopTemplate: boolean
   ) {
-    setDraggingTask({ subgoalId, taskId });
+    setDraggingItem({ subgoalId, itemId, isLoopTemplate });
     event.dataTransfer.effectAllowed = "move";
   }
 
-  function handleTaskDrop(
+  function handleItemDrop(
     event: React.DragEvent<HTMLLIElement>,
-    subgoalId: string,
-    targetTaskId: string
+    subgoalId: UUID,
+    targetItemId: UUID,
+    isLoopTemplate: boolean
   ) {
     event.preventDefault();
     event.stopPropagation();
-    if (!draggingTask || draggingTask.subgoalId !== subgoalId) {
-      setDraggingTask(null);
+    if (
+      !draggingItem ||
+      draggingItem.subgoalId !== subgoalId ||
+      draggingItem.isLoopTemplate !== isLoopTemplate
+    ) {
+      setDraggingItem(null);
       return;
     }
-    if (draggingTask.taskId === targetTaskId) {
-      setDraggingTask(null);
+    if (draggingItem.itemId === targetItemId) {
+      setDraggingItem(null);
       return;
     }
 
-    setSubgoals((prev) =>
-      prev.map((subgoal) => {
-        if (subgoal.id !== subgoalId) return subgoal;
-        const updated = [...subgoal.tasks];
-        const sourceIndex = updated.findIndex(
-          (task) => task.id === draggingTask.taskId
-        );
-        const targetIndex = updated.findIndex(
-          (task) => task.id === targetTaskId
-        );
-        if (sourceIndex === -1 || targetIndex === -1) {
-          return subgoal;
-        }
-        const [moved] = updated.splice(sourceIndex, 1);
-        updated.splice(targetIndex, 0, moved);
-        return { ...subgoal, tasks: updated };
-      })
-    );
-    setDraggingTask(null);
+    const subgoal = subgoals.find((s) => s.id === subgoalId);
+    if (!subgoal) return;
+    const list = isLoopTemplate ? subgoal.loopTaskTemplates : subgoal.tasks;
+    const targetIndex = list.findIndex((item) => item.id === targetItemId);
+    if (targetIndex !== -1) {
+      void onMovePlanItem(subgoalId, draggingItem.itemId, targetIndex, isLoopTemplate);
+    }
+    setDraggingItem(null);
   }
 
   return (
     <section className="space-y-4 rounded-2xl border border-border/80 bg-background/60 p-6">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-          Subgoal List
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">Subgoal List</p>
         <h2 className="text-2xl font-semibold">
           サブゴールとタスクをここに作成しましょう
-          <br></br>
+          <br />
           一番上のサブゴールとタスクがDo ページに反映されます
         </h2>
         <p className="text-sm text-muted-foreground">
-          並べ替えはドラッグ＆ドロップ、Enter
-          操作で新規タスク行を追加します。サーバー側でも order
-          を正規化する前提で、UI 制約も 30 件上限に合わせています。
+          並べ替えはドラッグ＆ドロップ、Enter 操作で新規タスク行を追加します。サーバー側でも order を正規化する前提で、UI 制約も
+          30 件上限に合わせています。
         </p>
       </header>
+
+      <div className="rounded-xl border border-border/60 bg-muted/10 p-3 text-sm">
+        {loading ? "読み込み中…" : error ? `エラー: ${error}` : "同期済みのデータを表示しています。"}
+        {error && (
+          <Button variant="link" className="px-2" onClick={() => onReload()}>
+            再読み込み
+          </Button>
+        )}
+      </div>
 
       <ol className="space-y-4">
         {subgoals.map((subgoal, index) => {
           const isDragging = draggingSubgoalId === subgoal.id;
-          const taskLimitReached =
-            subgoal.tasks.length >= MAX_TASKS_PER_SUBGOAL;
+          const activePlanItems = subgoal.tasks.length + subgoal.loopTaskTemplates.filter((lt) => lt.isActive).length;
+          const planLimitReached = activePlanItems >= MAX_PLAN_ITEMS;
           return (
             <li
               key={subgoal.id}
@@ -466,24 +436,15 @@ function SubgoalListSection() {
                 <div className="order-1 flex-1 space-y-2 sm:order-2">
                   <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
                     <span>{index + 1}. Subgoal</span>
-                    <span>
-                      Tasks {subgoal.tasks.length}/{MAX_TASKS_PER_SUBGOAL}
-                    </span>
+                    <span>Plan items {activePlanItems}/{MAX_PLAN_ITEMS}</span>
                   </div>
                   <Input
                     value={subgoal.title}
-                    onChange={(event) =>
-                      updateSubgoalTitle(subgoal.id, event.target.value)
-                    }
-                    onKeyDown={(event) =>
-                      handleSubgoalTitleKeyDown(event, subgoal)
-                    }
+                    onChange={(event) => handleUpdateSubgoalTitle(subgoal.id, event.target.value)}
+                    onKeyDown={(event) => handleSubgoalTitleKeyDown(event, subgoal)}
                     placeholder="サブゴールタイトル（例：マリーゴールドを弾けるようになる）"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Enter
-                    で新規タスク行が末尾に追加され、入力フォーカスが移動します。
-                  </p>
+                  <p className="text-xs text-muted-foreground">Enter で新規タスク行が末尾に追加され、入力フォーカスが移動します。</p>
                 </div>
                 <Button
                   type="button"
@@ -500,16 +461,20 @@ function SubgoalListSection() {
               <TaskList
                 subgoal={subgoal}
                 registerTaskInput={registerTaskInput}
-                draggingTask={draggingTask}
-                onTaskDragStart={handleTaskDragStart}
-                onTaskDrop={handleTaskDrop}
-                onTaskDragEnd={() => setDraggingTask(null)}
-                onTaskTitleChange={handleTaskTitleChange}
+                draggingItem={draggingItem}
+                onItemDragStart={handleItemDragStart}
+                onItemDrop={handleItemDrop}
+                onItemDragEnd={() => setDraggingItem(null)}
+                onItemTitleChange={handleItemTitleChange}
                 onTaskKeyDown={handleTaskKeyDown}
-                onToggleLoop={toggleTaskLoop}
-                onDeleteTask={deleteTask}
-                taskLimitReached={taskLimitReached}
-                onAddTask={() => addTaskRow(subgoal.id)}
+                onDeleteItem={deleteItem}
+                onConvertLoopTemplateToTask={(loopTemplateId) =>
+                  onConvertLoopTemplateToTask(subgoal.id, loopTemplateId)
+                }
+                onSetLoopTemplateActive={onSetLoopTemplateActive}
+                planLimitReached={planLimitReached}
+                onAddTask={() => addTaskRow(subgoal.id, false)}
+                onAddLoopTemplate={() => addTaskRow(subgoal.id, true)}
               />
             </li>
           );
@@ -536,22 +501,12 @@ function SubgoalListSection() {
             disabled={limitReached}
             aria-disabled={limitReached}
           />
-          <Button
-            type="button"
-            onClick={addSubgoal}
-            disabled={!canSubmitDraft}
-            className="sm:min-w-[160px]"
-          >
+          <Button type="button" onClick={addSubgoalRow} disabled={!canSubmitDraft} className="sm:min-w-[160px]">
             <Plus className="size-4" />
             Subgoal を追加
           </Button>
         </div>
-        <p
-          className={cn(
-            "text-xs",
-            limitReached ? "text-destructive" : "text-muted-foreground"
-          )}
-        >
+        <p className={cn("text-xs", limitReached ? "text-destructive" : "text-muted-foreground")}>
           {helperText}（{subgoals.length}/{MAX_SUBGOALS}）
         </p>
       </div>
@@ -560,65 +515,73 @@ function SubgoalListSection() {
 }
 
 type TaskListProps = {
-  subgoal: Subgoal;
-  registerTaskInput: (
-    taskId: string
-  ) => (element: HTMLInputElement | null) => void;
-  draggingTask: { subgoalId: string; taskId: string } | null;
-  onTaskDragStart: (
+  subgoal: {
+    id: UUID;
+    title: string;
+    tasks: Task[];
+    loopTaskTemplates: LoopTaskTemplate[];
+    goalId: UUID;
+  };
+  registerTaskInput: (taskId: string) => (element: HTMLInputElement | null) => void;
+  draggingItem: { subgoalId: UUID; itemId: UUID; isLoopTemplate: boolean } | null;
+  onItemDragStart: (
     event: React.DragEvent<HTMLLIElement>,
-    subgoalId: string,
-    taskId: string
+    subgoalId: UUID,
+    itemId: UUID,
+    isLoopTemplate: boolean
   ) => void;
-  onTaskDrop: (
+  onItemDrop: (
     event: React.DragEvent<HTMLLIElement>,
-    subgoalId: string,
-    taskId: string
+    subgoalId: UUID,
+    itemId: UUID,
+    isLoopTemplate: boolean
   ) => void;
-  onTaskDragEnd: () => void;
-  onTaskTitleChange: (subgoalId: string, taskId: string, value: string) => void;
-  onTaskKeyDown: (
-    event: React.KeyboardEvent<HTMLInputElement>,
-    subgoalId: string,
-    taskId: string
-  ) => void;
-  onToggleLoop: (subgoalId: string, taskId: string) => void;
-  onDeleteTask: (subgoalId: string, taskId: string) => void;
-  taskLimitReached: boolean;
+  onItemDragEnd: () => void;
+  onItemTitleChange: (subgoalId: UUID, taskId: UUID, value: string, isLoopTemplate: boolean) => void;
+  onTaskKeyDown: (event: React.KeyboardEvent<HTMLInputElement>, subgoalId: UUID, taskId: UUID) => void;
+  onDeleteItem: (subgoalId: UUID, taskId: UUID, isLoopTemplate: boolean) => void;
+  onConvertLoopTemplateToTask: (loopTemplateId: UUID) => Promise<Task>;
+  onSetLoopTemplateActive: (subgoalId: UUID, loopTemplateId: UUID, isActive: boolean) => Promise<LoopTaskTemplate>;
+  planLimitReached: boolean;
   onAddTask: () => void;
+  onAddLoopTemplate: () => void;
 };
 
 function TaskList({
   subgoal,
   registerTaskInput,
-  draggingTask,
-  onTaskDragStart,
-  onTaskDrop,
-  onTaskDragEnd,
-  onTaskTitleChange,
+  draggingItem,
+  onItemDragStart,
+  onItemDrop,
+  onItemDragEnd,
+  onItemTitleChange,
   onTaskKeyDown,
-  onToggleLoop,
-  onDeleteTask,
-  taskLimitReached,
+  onDeleteItem,
+  onConvertLoopTemplateToTask,
+  onSetLoopTemplateActive,
+  planLimitReached,
   onAddTask,
+  onAddLoopTemplate,
 }: TaskListProps) {
   return (
     <div className="space-y-3 rounded-xl border border-dashed border-border/70 bg-background/40 p-4">
-      <p className="text-sm font-semibold text-muted-foreground">Task List</p>
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-muted-foreground">
+        <span>Task List</span>
+        <span className="text-xs text-muted-foreground">通常タスクと定期テンプレはいずれも上限合算30件です。</span>
+      </div>
 
+      <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">通常タスク</h3>
       <ul className="space-y-2">
         {subgoal.tasks.map((task, index) => {
-          const isDragging = draggingTask?.taskId === task.id;
+          const isDragging = draggingItem?.itemId === task.id && draggingItem?.isLoopTemplate === false;
           return (
             <li
               key={task.id}
               draggable
-              onDragStart={(event) =>
-                onTaskDragStart(event, subgoal.id, task.id)
-              }
-              onDragEnd={onTaskDragEnd}
+              onDragStart={(event) => onItemDragStart(event, subgoal.id, task.id, false)}
+              onDragEnd={onItemDragEnd}
               onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => onTaskDrop(event, subgoal.id, task.id)}
+              onDrop={(event) => onItemDrop(event, subgoal.id, task.id, false)}
               className={cn(
                 "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/80 px-3 py-2 text-sm transition",
                 isDragging && "opacity-70 ring-2 ring-primary/40"
@@ -632,35 +595,21 @@ function TaskList({
               >
                 <GripVertical className="size-4" />
               </button>
-              <span className="text-xs font-semibold text-muted-foreground">
-                {index + 1}.
-              </span>
+              <span className="text-xs font-semibold text-muted-foreground">{index + 1}.</span>
               <Input
                 ref={registerTaskInput(task.id)}
                 value={task.title}
-                onChange={(event) =>
-                  onTaskTitleChange(subgoal.id, task.id, event.target.value)
-                }
+                onChange={(event) => onItemTitleChange(subgoal.id, task.id, event.target.value, false)}
                 onKeyDown={(event) => onTaskKeyDown(event, subgoal.id, task.id)}
                 placeholder="タスクを入力（例：Aマイナーを弾けるようになる）"
                 className="flex-1 min-w-[200px]"
               />
               <Button
                 type="button"
-                variant={task.isLoop ? "secondary" : "ghost"}
-                size="sm"
-                className="text-xs font-semibold"
-                aria-pressed={task.isLoop}
-                onClick={() => onToggleLoop(subgoal.id, task.id)}
-              >
-                {task.isLoop ? "定期" : "一回"}
-              </Button>
-              <Button
-                type="button"
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`${task.title || "タスク"}を削除`}
-                onClick={() => onDeleteTask(subgoal.id, task.id)}
+                onClick={() => onDeleteItem(subgoal.id, task.id, false)}
               >
                 <Trash2 className="size-4" />
               </Button>
@@ -675,26 +624,105 @@ function TaskList({
         )}
       </ul>
 
+      <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">定期テンプレ</h3>
+      <ul className="space-y-2">
+        {subgoal.loopTaskTemplates.map((loop, index) => {
+          const isDragging = draggingItem?.itemId === loop.id && draggingItem?.isLoopTemplate === true;
+          return (
+            <li
+              key={loop.id}
+              draggable
+              onDragStart={(event) => onItemDragStart(event, subgoal.id, loop.id, true)}
+              onDragEnd={onItemDragEnd}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => onItemDrop(event, subgoal.id, loop.id, true)}
+              className={cn(
+                "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/80 px-3 py-2 text-sm transition",
+                isDragging && "opacity-70 ring-2 ring-primary/40"
+              )}
+              aria-grabbed={isDragging}
+            >
+              <button
+                type="button"
+                className="text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                aria-label="定期テンプレの並び替えハンドル"
+              >
+                <GripVertical className="size-4" />
+              </button>
+              <span className="text-xs font-semibold text-muted-foreground">{index + 1}.</span>
+              <Input
+                ref={registerTaskInput(loop.id)}
+                value={loop.title}
+                onChange={(event) => onItemTitleChange(subgoal.id, loop.id, event.target.value, true)}
+                onKeyDown={(event) => onTaskKeyDown(event, subgoal.id, loop.id)}
+                placeholder="定期タスク名（例：毎日コードを30分書く）"
+                className="flex-1 min-w-[200px]"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs font-semibold"
+                aria-pressed={!loop.isActive}
+                onClick={() => onSetLoopTemplateActive(subgoal.id, loop.id, !loop.isActive)}
+              >
+                {loop.isActive ? "停止" : "再開"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="定期テンプレを通常タスクに変換"
+                onClick={() => onConvertLoopTemplateToTask(loop.id)}
+              >
+                変換
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`${loop.title || "定期テンプレ"}を削除`}
+                onClick={() => onDeleteItem(subgoal.id, loop.id, true)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </li>
+          );
+        })}
+
+        {subgoal.loopTaskTemplates.length === 0 && (
+          <li className="rounded-xl border border-dashed border-border/50 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            定期テンプレを追加するとここに表示されます。
+          </li>
+        )}
+      </ul>
+
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={onAddTask}
-          disabled={taskLimitReached}
+          disabled={planLimitReached}
           className="sm:w-fit"
         >
           <Plus className="size-4" />
           タスクを追加
         </Button>
-        <p
-          className={cn(
-            "text-xs",
-            taskLimitReached ? "text-destructive" : "text-muted-foreground"
-          )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onAddLoopTemplate}
+          disabled={planLimitReached}
+          className="sm:w-fit"
         >
-          {taskLimitReached
-            ? "タスクは 30 件が上限です。"
+          <Plus className="size-4" />
+          定期テンプレを追加
+        </Button>
+        <p className={cn("text-xs", planLimitReached ? "text-destructive" : "text-muted-foreground")}>
+          {planLimitReached
+            ? "Plan items は 30 件が上限です（通常タスク + 有効な定期テンプレ）。"
             : "Enter からの追加も可能です。"}
         </p>
       </div>

@@ -79,14 +79,11 @@ export const taskRepository = {
   }): Promise<Task | LoopTaskTemplate> {
     if (input.isLoopTemplate) {
       const { data, error } = await supabase
-        .from("loop_task_templates")
-        .insert({
-          subgoal_id: input.subgoalId,
-          title: input.title,
-          sort_key: input.sortKey,
-          is_active: true,
+        .rpc("monotodo_create_loop_task_template", {
+          p_subgoal_id: input.subgoalId,
+          p_title: input.title,
+          p_sort_key: input.sortKey,
         })
-        .select("*")
         .single();
 
       if (error) {
@@ -96,14 +93,11 @@ export const taskRepository = {
     }
 
     const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        subgoal_id: input.subgoalId,
-        title: input.title,
-        sort_key: input.sortKey,
-        kind: "normal",
+      .rpc("monotodo_create_task", {
+        p_subgoal_id: input.subgoalId,
+        p_title: input.title,
+        p_sort_key: input.sortKey,
       })
-      .select("*")
       .single();
 
     if (error) {

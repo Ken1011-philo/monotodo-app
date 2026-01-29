@@ -270,12 +270,10 @@ export const goalRepository = {
     sortKey: number;
   }): Promise<Subgoal> {
     const { data, error } = await supabase
-      .from("subgoals")
-      .insert({
-        title: input.title,
-        sort_key: input.sortKey,
+      .rpc("monotodo_create_subgoal", {
+        p_title: input.title,
+        p_sort_key: input.sortKey,
       })
-      .select("*")
       .single();
 
     if (error) {
