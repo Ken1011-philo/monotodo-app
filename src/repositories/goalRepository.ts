@@ -172,7 +172,6 @@ async function fetchSubgoalTree(goalId: UUID): Promise<PlanSubgoalNode[]> {
       .select("*")
       .in("subgoal_id", subgoalIds)
       .is("deleted_at", null)
-      .eq("is_active", true)
       .order("sort_key", { ascending: true }),
   ]);
 
@@ -270,12 +269,10 @@ export const goalRepository = {
     sortKey: number;
   }): Promise<Subgoal> {
     const { data, error } = await supabase
-      .from("subgoals")
-      .insert({
-        title: input.title,
-        sort_key: input.sortKey,
+      .rpc("monotodo_create_subgoal", {
+        p_title: input.title,
+        p_sort_key: input.sortKey,
       })
-      .select("*")
       .single();
 
     if (error) {
@@ -290,11 +287,11 @@ export const goalRepository = {
     expectedRevision: number;
   }): Promise<Subgoal> {
     const { data, error } = await supabase
-      .from("subgoals")
-      .update({ title: input.title })
-      .eq("id", input.subgoalId)
-      .eq("revision", input.expectedRevision)
-      .select("*")
+      .rpc("monotodo_update_subgoal_title", {
+        p_subgoal_id: input.subgoalId,
+        p_title: input.title,
+        p_expected_revision: input.expectedRevision,
+      })
       .single();
 
     if (error) {
@@ -329,11 +326,10 @@ export const goalRepository = {
     subgoalId: UUID;
     expectedRevision: number;
   }): Promise<void> {
-    const { error } = await supabase
-      .from("subgoals")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", input.subgoalId)
-      .eq("revision", input.expectedRevision);
+    const { error } = await supabase.rpc("monotodo_delete_subgoal", {
+      p_subgoal_id: input.subgoalId,
+      p_expected_revision: input.expectedRevision,
+    });
 
     if (error) {
       throw new Error(`Failed to delete subgoal: ${error.message}`);
@@ -344,26 +340,16 @@ export const goalRepository = {
     subgoalId: UUID;
     targetSortKey: number;
   }): Promise<Subgoal[]> {
-    const { error } = await supabase
-      .from("subgoals")
-      .update({ sort_key: input.targetSortKey })
-      .eq("id", input.subgoalId);
+    const { data, error } = await supabase.rpc("monotodo_move_subgoal", {
+      p_subgoal_id: input.subgoalId,
+      p_target_sort_key: input.targetSortKey,
+    });
 
     if (error) {
       throw new Error(`Failed to move subgoal: ${error.message}`);
     }
 
-    const { data: rows, error: fetchError } = await supabase
-      .from("subgoals")
-      .select("*")
-      .is("deleted_at", null)
-      .order("sort_key", { ascending: true });
-
-    if (fetchError) {
-      throw new Error(`Failed to reload subgoals: ${fetchError.message}`);
-    }
-
-    return (rows ?? []).map((row) => mapSubgoal(row as SubgoalRow));
+    return (data ?? []).map((row: unknown) => mapSubgoal(row as SubgoalRow));
   },
 };
 

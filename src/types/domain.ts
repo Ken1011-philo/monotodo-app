@@ -156,6 +156,11 @@ export interface PlanRepository {
     isActive: boolean;
     expectedRevision: number;
   }): Promise<LoopTaskTemplate>;
+  updateTaskCompleted(input: {
+    taskId: UUID;
+    completed: boolean;
+    expectedRevision: number | null;
+  }): Promise<Task>;
 }
 export interface UserSettings {
   userId: UUID;

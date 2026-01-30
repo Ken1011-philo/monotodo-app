@@ -79,14 +79,11 @@ export const taskRepository = {
   }): Promise<Task | LoopTaskTemplate> {
     if (input.isLoopTemplate) {
       const { data, error } = await supabase
-        .from("loop_task_templates")
-        .insert({
-          subgoal_id: input.subgoalId,
-          title: input.title,
-          sort_key: input.sortKey,
-          is_active: true,
+        .rpc("monotodo_create_loop_task_template", {
+          p_subgoal_id: input.subgoalId,
+          p_title: input.title,
+          p_sort_key: input.sortKey,
         })
-        .select("*")
         .single();
 
       if (error) {
@@ -96,14 +93,11 @@ export const taskRepository = {
     }
 
     const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        subgoal_id: input.subgoalId,
-        title: input.title,
-        sort_key: input.sortKey,
-        kind: "normal",
+      .rpc("monotodo_create_task", {
+        p_subgoal_id: input.subgoalId,
+        p_title: input.title,
+        p_sort_key: input.sortKey,
       })
-      .select("*")
       .single();
 
     if (error) {
@@ -120,11 +114,11 @@ export const taskRepository = {
   }): Promise<Task | LoopTaskTemplate> {
     if (input.isLoopTemplate) {
       const { data, error } = await supabase
-        .from("loop_task_templates")
-        .update({ title: input.title })
-        .eq("id", input.itemId)
-        .eq("revision", input.expectedRevision)
-        .select("*")
+        .rpc("monotodo_update_loop_task_template_title", {
+          p_template_id: input.itemId,
+          p_title: input.title,
+          p_expected_revision: input.expectedRevision,
+        })
         .single();
 
       if (error) {
@@ -134,11 +128,11 @@ export const taskRepository = {
     }
 
     const { data, error } = await supabase
-      .from("tasks")
-      .update({ title: input.title })
-      .eq("id", input.itemId)
-      .eq("revision", input.expectedRevision)
-      .select("*")
+      .rpc("monotodo_update_task_title", {
+        p_task_id: input.itemId,
+        p_title: input.title,
+        p_expected_revision: input.expectedRevision,
+      })
       .single();
 
     if (error) {
@@ -154,49 +148,26 @@ export const taskRepository = {
     isLoopTemplate: boolean;
   }): Promise<Task[] | LoopTaskTemplate[]> {
     if (input.isLoopTemplate) {
-      const { error } = await supabase
-        .from("loop_task_templates")
-        .update({ sort_key: input.targetSortKey })
-        .eq("id", input.itemId);
+      const { data, error } = await supabase.rpc("monotodo_move_loop_task_template", {
+        p_template_id: input.itemId,
+        p_target_sort_key: input.targetSortKey,
+      });
 
       if (error) {
         throw new Error(`Failed to move loop task template: ${error.message}`);
       }
-
-      const { data, error: fetchError } = await supabase
-        .from("loop_task_templates")
-        .select("*")
-        .eq("subgoal_id", input.subgoalId)
-        .is("deleted_at", null)
-        .eq("is_active", true)
-        .order("sort_key", { ascending: true });
-
-      if (fetchError) {
-        throw new Error(`Failed to reload loop task templates: ${fetchError.message}`);
-      }
-      return (data ?? []).map((row) => mapLoopTemplate(row as LoopTemplateRow));
+      return (data ?? []).map((row: unknown) => mapLoopTemplate(row as LoopTemplateRow));
     }
 
-    const { error } = await supabase
-      .from("tasks")
-      .update({ sort_key: input.targetSortKey })
-      .eq("id", input.itemId);
+    const { data, error } = await supabase.rpc("monotodo_move_task", {
+      p_task_id: input.itemId,
+      p_target_sort_key: input.targetSortKey,
+    });
 
     if (error) {
       throw new Error(`Failed to move task: ${error.message}`);
     }
-
-    const { data, error: fetchError } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("subgoal_id", input.subgoalId)
-      .is("deleted_at", null)
-      .order("sort_key", { ascending: true });
-
-    if (fetchError) {
-      throw new Error(`Failed to reload tasks: ${fetchError.message}`);
-    }
-    return (data ?? []).map((row) => mapTask(row as TaskRow));
+    return (data ?? []).map((row: unknown) => mapTask(row as TaskRow));
   },
 
   async deletePlanItem(input: {
@@ -205,18 +176,20 @@ export const taskRepository = {
     isLoopTemplate: boolean;
     expectedRevision: number;
   }): Promise<void> {
-    const deleted_at = new Date().toISOString();
-    const table = input.isLoopTemplate ? "loop_task_templates" : "tasks";
-
-    const { error } = await supabase
-      .from(table)
-      .update({ deleted_at })
-      .eq("id", input.itemId)
-      .eq("revision", input.expectedRevision);
-
-    if (error) {
-      throw new Error(`Failed to delete item: ${error.message}`);
+    if (input.isLoopTemplate) {
+      const { error } = await supabase.rpc("monotodo_delete_loop_task_template", {
+        p_template_id: input.itemId,
+        p_expected_revision: input.expectedRevision,
+      });
+      if (error) throw new Error(`Failed to delete item: ${error.message}`);
+      return;
     }
+
+    const { error } = await supabase.rpc("monotodo_delete_task", {
+      p_task_id: input.itemId,
+      p_expected_revision: input.expectedRevision,
+    });
+    if (error) throw new Error(`Failed to delete item: ${error.message}`);
   },
 
   async convertLoopTemplateToTask(input: {
@@ -269,17 +242,37 @@ export const taskRepository = {
     expectedRevision: number;
   }): Promise<LoopTaskTemplate> {
     const { data, error } = await supabase
-      .from("loop_task_templates")
-      .update({ is_active: input.isActive })
-      .eq("id", input.loopTemplateId)
-      .eq("revision", input.expectedRevision)
-      .select("*")
+      .rpc("monotodo_set_loop_template_active", {
+        p_template_id: input.loopTemplateId,
+        p_is_active: input.isActive,
+        p_expected_revision: input.expectedRevision,
+      })
       .single();
 
     if (error) {
       throw new Error(`Failed to update loop template active flag: ${error.message}`);
     }
     return mapLoopTemplate(data as LoopTemplateRow);
+  },
+
+  async updateTaskCompleted(input: {
+    taskId: UUID;
+    completed: boolean;
+    expectedRevision: number | null;
+  }): Promise<Task> {
+    const { data, error } = await supabase
+      .rpc("monotodo_update_task_completed", {
+        p_task_id: input.taskId,
+        p_completed: input.completed,
+        p_expected_revision: input.expectedRevision,
+      })
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update task completed: ${error.message}`);
+    }
+
+    return mapTask(data as TaskRow);
   },
 };
 

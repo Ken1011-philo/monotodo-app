@@ -18,6 +18,7 @@ export const planRepository: PlanRepositoryContract = {
   deletePlanItem: (input) => taskRepository.deletePlanItem(input),
   convertLoopTemplateToTask: (input) => taskRepository.convertLoopTemplateToTask(input),
   setLoopTemplateActive: (input) => taskRepository.setLoopTemplateActive(input),
+  updateTaskCompleted: (input) => taskRepository.updateTaskCompleted(input),
 };
 
 export type PlanRepository = typeof planRepository;

@@ -841,6 +841,448 @@ for each row execute function public.monotodo_on_loop_template_update();
 -- 6) RPC (core set)
 -- =====================================================
 
+-- (A0) Subgoal作成（直DML禁止のためSecurity Definer）
+create or replace function public.monotodo_create_subgoal(
+  p_title text,
+  p_sort_key bigint
+)
+returns public.subgoals
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.subgoals%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  insert into public.subgoals(title, sort_key)
+  values (p_title, p_sort_key)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+-- (A1) Task作成（normal）
+create or replace function public.monotodo_create_task(
+  p_subgoal_id uuid,
+  p_title text,
+  p_sort_key bigint
+)
+returns public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  insert into public.tasks(subgoal_id, title, sort_key, kind)
+  values (p_subgoal_id, p_title, p_sort_key, 'normal')
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+-- (A2) ループテンプレ作成
+create or replace function public.monotodo_create_loop_task_template(
+  p_subgoal_id uuid,
+  p_title text,
+  p_sort_key bigint
+)
+returns public.loop_task_templates
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.loop_task_templates%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  insert into public.loop_task_templates(subgoal_id, title, sort_key, is_active)
+  values (p_subgoal_id, p_title, p_sort_key, true)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+-- (A7) Subgoalタイトル更新（楽観ロック）
+create or replace function public.monotodo_update_subgoal_title(
+  p_subgoal_id uuid,
+  p_title text,
+  p_expected_revision bigint
+)
+returns public.subgoals
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.subgoals%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.subgoals
+     set title = p_title
+   where id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null
+     and revision = p_expected_revision
+   returning * into v_row;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- (A8) Subgoal 並び替え
+create or replace function public.monotodo_move_subgoal(
+  p_subgoal_id uuid,
+  p_target_sort_key bigint
+)
+returns setof public.subgoals
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.subgoals
+     set sort_key = p_target_sort_key
+   where id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  return query
+    select *
+      from public.subgoals
+     where user_id = auth.uid()
+       and deleted_at is null
+     order by sort_key asc, id asc;
+end;
+$$;
+
+-- (A9) Task 並び替え（同一サブゴール内）
+create or replace function public.monotodo_move_task(
+  p_task_id uuid,
+  p_target_sort_key bigint
+)
+returns setof public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_subgoal_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  select subgoal_id into v_subgoal_id
+    from public.tasks
+   where id = p_task_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  if v_subgoal_id is null then
+    raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+  end if;
+
+  update public.tasks
+     set sort_key = p_target_sort_key
+   where id = p_task_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  return query
+    select *
+      from public.tasks
+     where subgoal_id = v_subgoal_id
+       and user_id = auth.uid()
+       and deleted_at is null
+     order by sort_key asc nulls last, id asc;
+end;
+$$;
+
+-- (A10) ループテンプレ 並び替え（同一サブゴール内）
+create or replace function public.monotodo_move_loop_task_template(
+  p_template_id uuid,
+  p_target_sort_key bigint
+)
+returns setof public.loop_task_templates
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_subgoal_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  select subgoal_id into v_subgoal_id
+    from public.loop_task_templates
+   where id = p_template_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  if v_subgoal_id is null then
+    raise exception 'MONOTODO_FORBIDDEN' using errcode = 'P0001';
+  end if;
+
+  update public.loop_task_templates
+     set sort_key = p_target_sort_key
+   where id = p_template_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  return query
+    select *
+      from public.loop_task_templates
+     where subgoal_id = v_subgoal_id
+       and user_id = auth.uid()
+       and deleted_at is null
+       and is_active = true
+    order by sort_key asc, id asc;
+end;
+$$;
+
+-- (A11) Task完了トグル（楽観ロック任意）
+create or replace function public.monotodo_update_task_completed(
+  p_task_id uuid,
+  p_completed boolean,
+  p_expected_revision bigint default null
+)
+returns public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  if p_expected_revision is null then
+    update public.tasks
+       set completed = p_completed,
+           completed_at = case when p_completed then now() else null end
+     where id = p_task_id
+       and user_id = auth.uid()
+       and deleted_at is null
+     returning * into v_row;
+  else
+    update public.tasks
+       set completed = p_completed,
+           completed_at = case when p_completed then now() else null end
+     where id = p_task_id
+       and user_id = auth.uid()
+       and deleted_at is null
+       and revision = p_expected_revision
+     returning * into v_row;
+  end if;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- (A5) Task削除（tombstone）
+create or replace function public.monotodo_delete_task(
+  p_task_id uuid,
+  p_expected_revision bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.tasks
+     set deleted_at = now()
+   where id = p_task_id
+     and user_id = auth.uid()
+     and revision = p_expected_revision;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- (A6) ループテンプレ削除（停止+削除フラグ）
+create or replace function public.monotodo_delete_loop_task_template(
+  p_template_id uuid,
+  p_expected_revision bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.loop_task_templates%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.loop_task_templates
+     set deleted_at = now(),
+         is_active = false
+   where id = p_template_id
+     and user_id = auth.uid()
+     and revision = p_expected_revision;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- (A11) Subgoal削除（配下Plan Itemsもtombstone）
+create or replace function public.monotodo_delete_subgoal(
+  p_subgoal_id uuid,
+  p_expected_revision bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  -- 配下plan itemsをtombstone（推奨運用）
+  update public.tasks
+     set deleted_at = now()
+   where subgoal_id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  update public.loop_task_templates
+     set deleted_at = now(),
+         is_active = false
+   where subgoal_id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  -- subgoal本体をtombstone（楽観ロック）
+  update public.subgoals
+     set deleted_at = now()
+   where id = p_subgoal_id
+     and user_id = auth.uid()
+     and revision = p_expected_revision;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- (A3) Taskタイトル更新（楽観ロック）
+create or replace function public.monotodo_update_task_title(
+  p_task_id uuid,
+  p_title text,
+  p_expected_revision bigint
+)
+returns public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.tasks
+     set title = p_title
+   where id = p_task_id
+     and user_id = auth.uid()
+     and deleted_at is null
+     and revision = p_expected_revision
+   returning * into v_row;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- (A4) ループテンプレタイトル更新（楽観ロック）
+create or replace function public.monotodo_update_loop_task_template_title(
+  p_template_id uuid,
+  p_title text,
+  p_expected_revision bigint
+)
+returns public.loop_task_templates
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.loop_task_templates%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  update public.loop_task_templates
+     set title = p_title
+   where id = p_template_id
+     and user_id = auth.uid()
+     and deleted_at is null
+     and revision = p_expected_revision
+   returning * into v_row;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
 -- (A) 次タスク（Doページ）
 create or replace function public.monotodo_select_next_task()
 returns table(
@@ -1422,6 +1864,19 @@ grant execute on function public.monotodo_aggregate_missing_days() to authentica
 grant execute on function public.monotodo_rollover_loop_tasks() to authenticated;
 grant execute on function public.monotodo_sync(bigint) to authenticated;
 grant execute on function public.monotodo_reset_goal() to authenticated;
+grant execute on function public.monotodo_create_subgoal(text, bigint) to authenticated;
+grant execute on function public.monotodo_create_task(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_create_loop_task_template(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_update_task_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_update_loop_task_template_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_delete_task(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_delete_loop_task_template(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_update_subgoal_title(uuid, text, bigint) to authenticated;
+grant execute on function public.monotodo_move_subgoal(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_move_task(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_move_loop_task_template(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_delete_subgoal(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_update_task_completed(uuid, boolean, bigint) to authenticated;
 
 -- =====================================================
 -- END
