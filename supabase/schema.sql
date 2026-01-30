@@ -1065,7 +1065,52 @@ begin
        and user_id = auth.uid()
        and deleted_at is null
        and is_active = true
-     order by sort_key asc, id asc;
+    order by sort_key asc, id asc;
+end;
+$$;
+
+-- (A11) Task完了トグル（楽観ロック任意）
+create or replace function public.monotodo_update_task_completed(
+  p_task_id uuid,
+  p_completed boolean,
+  p_expected_revision bigint default null
+)
+returns public.tasks
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tasks%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  if p_expected_revision is null then
+    update public.tasks
+       set completed = p_completed,
+           completed_at = case when p_completed then now() else null end
+     where id = p_task_id
+       and user_id = auth.uid()
+       and deleted_at is null
+     returning * into v_row;
+  else
+    update public.tasks
+       set completed = p_completed,
+           completed_at = case when p_completed then now() else null end
+     where id = p_task_id
+       and user_id = auth.uid()
+       and deleted_at is null
+       and revision = p_expected_revision
+     returning * into v_row;
+  end if;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+
+  return v_row;
 end;
 $$;
 
@@ -1119,6 +1164,48 @@ begin
      set deleted_at = now(),
          is_active = false
    where id = p_template_id
+     and user_id = auth.uid()
+     and revision = p_expected_revision;
+
+  if not found then
+    raise exception 'MONOTODO_CONFLICT' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- (A11) Subgoal削除（配下Plan Itemsもtombstone）
+create or replace function public.monotodo_delete_subgoal(
+  p_subgoal_id uuid,
+  p_expected_revision bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'MONOTODO_UNAUTHORIZED' using errcode = 'P0001';
+  end if;
+
+  -- 配下plan itemsをtombstone（推奨運用）
+  update public.tasks
+     set deleted_at = now()
+   where subgoal_id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  update public.loop_task_templates
+     set deleted_at = now(),
+         is_active = false
+   where subgoal_id = p_subgoal_id
+     and user_id = auth.uid()
+     and deleted_at is null;
+
+  -- subgoal本体をtombstone（楽観ロック）
+  update public.subgoals
+     set deleted_at = now()
+   where id = p_subgoal_id
      and user_id = auth.uid()
      and revision = p_expected_revision;
 
@@ -1788,6 +1875,8 @@ grant execute on function public.monotodo_update_subgoal_title(uuid, text, bigin
 grant execute on function public.monotodo_move_subgoal(uuid, bigint) to authenticated;
 grant execute on function public.monotodo_move_task(uuid, bigint) to authenticated;
 grant execute on function public.monotodo_move_loop_task_template(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_delete_subgoal(uuid, bigint) to authenticated;
+grant execute on function public.monotodo_update_task_completed(uuid, boolean, bigint) to authenticated;
 
 -- =====================================================
 -- END

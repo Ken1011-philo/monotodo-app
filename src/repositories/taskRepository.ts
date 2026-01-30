@@ -242,17 +242,37 @@ export const taskRepository = {
     expectedRevision: number;
   }): Promise<LoopTaskTemplate> {
     const { data, error } = await supabase
-      .from("loop_task_templates")
-      .update({ is_active: input.isActive })
-      .eq("id", input.loopTemplateId)
-      .eq("revision", input.expectedRevision)
-      .select("*")
+      .rpc("monotodo_set_loop_template_active", {
+        p_template_id: input.loopTemplateId,
+        p_is_active: input.isActive,
+        p_expected_revision: input.expectedRevision,
+      })
       .single();
 
     if (error) {
       throw new Error(`Failed to update loop template active flag: ${error.message}`);
     }
     return mapLoopTemplate(data as LoopTemplateRow);
+  },
+
+  async updateTaskCompleted(input: {
+    taskId: UUID;
+    completed: boolean;
+    expectedRevision: number | null;
+  }): Promise<Task> {
+    const { data, error } = await supabase
+      .rpc("monotodo_update_task_completed", {
+        p_task_id: input.taskId,
+        p_completed: input.completed,
+        p_expected_revision: input.expectedRevision,
+      })
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update task completed: ${error.message}`);
+    }
+
+    return mapTask(data as TaskRow);
   },
 };
 

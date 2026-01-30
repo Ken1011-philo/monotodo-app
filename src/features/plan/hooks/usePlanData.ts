@@ -35,6 +35,15 @@ function computeSortKey(
   return Math.floor((prev + next) / 2);
 }
 
+function combinedPlanItems(subgoal: PlanSubgoalNode): Array<
+  (Task | LoopTaskTemplate) & { isLoopTemplate: boolean }
+> {
+  return [
+    ...subgoal.tasks.filter((t) => !t.completed).map((t) => ({ ...t, isLoopTemplate: false })),
+    ...subgoal.loopTaskTemplates.filter((l) => l.isActive).map((l) => ({ ...l, isLoopTemplate: true })),
+  ].sort((a, b) => a.sortKey - b.sortKey || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+
 export function usePlanData() {
   const [plan, setPlan] = useState<PlanState>({ goal: null, subgoals: [] });
   const [status, setStatus] = useState<PlanStatus>({
@@ -188,7 +197,7 @@ export function usePlanData() {
     async (subgoalId: UUID, title: string, isLoopTemplate: boolean) => {
       const subgoal = subgoalMap.get(subgoalId);
       if (!subgoal) throw new Error("Subgoal not found");
-      const list = isLoopTemplate ? subgoal.loopTaskTemplates : subgoal.tasks;
+      const list = combinedPlanItems(subgoal);
       const sortKey = computeSortKey(list, list.length);
       const created = await planRepository.createPlanItem({
         subgoalId,
@@ -308,7 +317,7 @@ export function usePlanData() {
     ) => {
       const subgoal = subgoalMap.get(subgoalId);
       if (!subgoal) throw new Error("Subgoal not found");
-      const list = isLoopTemplate ? subgoal.loopTaskTemplates : subgoal.tasks;
+      const list = combinedPlanItems(subgoal);
       const nextSortKey = computeSortKey(list, targetIndex);
 
       const updated = await planRepository.movePlanItem({
@@ -363,26 +372,69 @@ export function usePlanData() {
       const target = subgoal.loopTaskTemplates.find((t) => t.id === loopTemplateId);
       if (!target) throw new Error("Loop task template not found");
 
-      const updated = await planRepository.setLoopTemplateActive({
-        loopTemplateId,
-        isActive,
-        expectedRevision: target.revision,
-      });
+      try {
+        const updated = await planRepository.setLoopTemplateActive({
+          loopTemplateId,
+          isActive,
+          expectedRevision: target.revision,
+        });
 
-      setPlan((prev) => ({
-        ...prev,
-        subgoals: prev.subgoals.map((s) => {
-          if (s.id !== subgoalId) return s;
-          const list = s.loopTaskTemplates.map((t) =>
-            t.id === loopTemplateId ? updated : t
-          );
-          const filtered = isActive ? list : list.filter((t) => t.id !== loopTemplateId);
-          return { ...s, loopTaskTemplates: filtered };
-        }),
-      }));
-      return updated;
+        setPlan((prev) => ({
+          ...prev,
+          subgoals: prev.subgoals.map((s) => {
+            if (s.id !== subgoalId) return s;
+            const nextLoopTemplates = s.loopTaskTemplates.map((t) =>
+              t.id === loopTemplateId ? updated : t
+            );
+            return { ...s, loopTaskTemplates: nextLoopTemplates };
+          }),
+        }));
+        return updated;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("MONOTODO_CONFLICT")) {
+          await loadPlan();
+        }
+        throw error;
+      }
     },
-    [subgoalMap]
+    [subgoalMap, loadPlan]
+  );
+
+  const setTaskCompleted = useCallback(
+    async (subgoalId: UUID, taskId: UUID, completed: boolean) => {
+      const subgoal = subgoalMap.get(subgoalId);
+      if (!subgoal) throw new Error("Subgoal not found");
+      const task = subgoal.tasks.find((t) => t.id === taskId);
+      if (!task) throw new Error("Task not found");
+
+      try {
+        const updated = await planRepository.updateTaskCompleted({
+          taskId,
+          completed,
+          expectedRevision: task.revision ?? null,
+        });
+
+        setPlan((prev) => ({
+          ...prev,
+          subgoals: prev.subgoals.map((s) => {
+            if (s.id !== subgoalId) return s;
+            return {
+              ...s,
+              tasks: s.tasks.map((t) => (t.id === taskId ? { ...(t as Task), ...(updated as Task) } : t)),
+            };
+          }),
+        }));
+        return updated;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("MONOTODO_CONFLICT")) {
+          await loadPlan();
+        }
+        throw error;
+      }
+    },
+    [subgoalMap, loadPlan]
   );
 
   return {
@@ -401,5 +453,6 @@ export function usePlanData() {
     movePlanItem,
     convertLoopTemplateToTask,
     setLoopTemplateActive,
+    setTaskCompleted,
   };
 }

@@ -172,7 +172,6 @@ async function fetchSubgoalTree(goalId: UUID): Promise<PlanSubgoalNode[]> {
       .select("*")
       .in("subgoal_id", subgoalIds)
       .is("deleted_at", null)
-      .eq("is_active", true)
       .order("sort_key", { ascending: true }),
   ]);
 
@@ -327,11 +326,10 @@ export const goalRepository = {
     subgoalId: UUID;
     expectedRevision: number;
   }): Promise<void> {
-    const { error } = await supabase
-      .from("subgoals")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", input.subgoalId)
-      .eq("revision", input.expectedRevision);
+    const { error } = await supabase.rpc("monotodo_delete_subgoal", {
+      p_subgoal_id: input.subgoalId,
+      p_expected_revision: input.expectedRevision,
+    });
 
     if (error) {
       throw new Error(`Failed to delete subgoal: ${error.message}`);
