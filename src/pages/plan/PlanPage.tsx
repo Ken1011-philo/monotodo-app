@@ -43,11 +43,6 @@ export default function PlanPage() {
           Plan
         </p>
         <h1 className="text-3xl font-semibold">Goal / Subgoal 設計</h1>
-        <p className="text-sm text-muted-foreground">
-          Supabase と同期しながら Plan
-          ページの入力体験を整備しています。ここで確定した情報が Do / Focus
-          へ流れます。
-        </p>
       </header>
 
       <div className="space-y-8">
@@ -272,7 +267,7 @@ function SubgoalListSection({
     if (limitReached) {
       return "Subgoal は 30 件が上限です。削除してから追加してください。";
     }
-    return "Enter または追加ボタンで新しい Subgoal を末尾に挿入できます。";
+    return "Enter または追加ボタンで新しい Subgoal挿入できます。";
   }, [limitReached]);
 
   useEffect(() => {
@@ -499,11 +494,6 @@ function SubgoalListSection({
           <br />
           一番上のサブゴールとタスクがDo ページに反映されます
         </h2>
-        <p className="text-sm text-muted-foreground">
-          並べ替えはドラッグ＆ドロップ、Enter
-          操作で新規タスク行を追加します。サーバー側でも order
-          を正規化する前提で、UI 制約も 30 件上限に合わせています。
-        </p>
       </header>
 
       <div className="rounded-xl border border-border/60 bg-muted/10 p-3 text-sm">
@@ -511,7 +501,7 @@ function SubgoalListSection({
           ? "読み込み中…"
           : error
             ? `エラー: ${error}`
-            : "同期済みのデータを表示しています。"}
+            : "正常にデータが同期されました"}
         {error && (
           <Button variant="link" className="px-2" onClick={() => onReload()}>
             再読み込み
@@ -578,7 +568,7 @@ function SubgoalListSection({
                     onKeyDown={(event) =>
                       handleSubgoalTitleKeyDown(event, subgoal)
                     }
-                    placeholder="サブゴールタイトル（例：マリーゴールドを弾けるようになる）"
+                    placeholder="サブゴールタイトル（例：人物が描けるようになる）"
                   />
                   <p className="text-xs text-muted-foreground">
                     Enter
