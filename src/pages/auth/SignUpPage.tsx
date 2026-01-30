@@ -8,8 +8,24 @@ interface LoginLocationState {
 
 const MAX_EMAIL_LEN = 254;
 
+// パスワード要件：英小文字+数字のみ / 8〜32 / 小文字1つ以上 & 数字1つ以上
+const PASSWORD_MIN_LEN = 8;
+const PASSWORD_MAX_LEN = 32;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*\d)[a-z\d]{8,32}$/;
+
 function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase().slice(0, MAX_EMAIL_LEN);
+}
+
+function getPasswordRuleError(pw: string): string | null {
+  if (!pw) return null; // 未入力は required に任せる
+  if (pw.length < PASSWORD_MIN_LEN || pw.length > PASSWORD_MAX_LEN) {
+    return `パスワードは ${PASSWORD_MIN_LEN}〜${PASSWORD_MAX_LEN} 文字にしてください。`;
+  }
+  if (!PASSWORD_REGEX.test(pw)) {
+    return "パスワードは「英小文字と数字のみ」で、小文字と数字をそれぞれ1文字以上含めてください。";
+  }
+  return null;
 }
 
 export default function SignUpPage() {
@@ -48,6 +64,8 @@ export default function SignUpPage() {
     return status === "loading";
   }, [view, status]);
 
+  const passwordRuleError = useMemo(() => getPasswordRuleError(password), [password]);
+
   const confirmError = useMemo(() => {
     if (!passwordConfirm) return null;
     if (password !== passwordConfirm) return "パスワードが一致しません。";
@@ -57,10 +75,11 @@ export default function SignUpPage() {
   const canSubmit = useMemo(() => {
     if (!normalizedEmail || !password || !passwordConfirm) return false;
     if (normalizedEmail.length > MAX_EMAIL_LEN) return false;
+    if (passwordRuleError) return false;
     if (confirmError) return false;
     if (disabled) return false;
     return true;
-  }, [normalizedEmail, password, passwordConfirm, confirmError, disabled]);
+  }, [normalizedEmail, password, passwordConfirm, passwordRuleError, confirmError, disabled]);
 
   // 既ログインならリダイレクト（LoginPage と同等）
   useEffect(() => {
@@ -164,12 +183,26 @@ export default function SignUpPage() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="••••••••"
+                placeholder="パスワード"
                 required
                 disabled={disabled}
                 autoComplete="new-password"
+                inputMode="text"
+                minLength={PASSWORD_MIN_LEN}
+                maxLength={PASSWORD_MAX_LEN}
+                pattern="[a-z0-9]{8,32}"
+                title="英小文字と数字のみ（8〜32文字）"
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-base shadow-inner focus:border-primary focus:outline-none"
               />
+
+              {/* ルール表示（常時） */}
+              <p className="text-xs text-muted-foreground">
+                英小文字+数字のみ（8〜32文字）。小文字と数字をそれぞれ1文字以上含めてください。
+              </p>
+
+              {passwordRuleError && (
+                <p className="text-sm text-destructive">{passwordRuleError}</p>
+              )}
             </label>
 
             <label className="block space-y-2 text-sm font-medium">
@@ -178,10 +211,15 @@ export default function SignUpPage() {
                 type="password"
                 value={passwordConfirm}
                 onChange={(event) => setPasswordConfirm(event.target.value)}
-                placeholder="••••••••"
+                placeholder="パスワード"
                 required
                 disabled={disabled}
                 autoComplete="new-password"
+                inputMode="text"
+                minLength={PASSWORD_MIN_LEN}
+                maxLength={PASSWORD_MAX_LEN}
+                pattern="[a-z0-9]{8,32}"
+                title="英小文字と数字のみ（8〜32文字）"
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-base shadow-inner focus:border-primary focus:outline-none"
               />
               {confirmError && (
