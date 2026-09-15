@@ -1,6 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
-import { useCallback, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 const navItems = [
@@ -10,17 +8,6 @@ const navItems = [
 ];
 
 export default function AppLayout() {
-  const [isSigningOut, setIsSigningOut] = useState(false);
-
-  const handleSignOut = useCallback(async () => {
-    setIsSigningOut(true);
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setIsSigningOut(false);
-    }
-  }, []);
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -52,14 +39,6 @@ export default function AppLayout() {
           ))}
         </nav>
 
-        <button
-          type="button"
-          onClick={handleSignOut}
-          disabled={isSigningOut}
-          className="inline-flex items-center justify-center rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-60"
-        >
-          {isSigningOut ? "サインアウト中…" : "サインアウト"}
-        </button>
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10">
