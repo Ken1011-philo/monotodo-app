@@ -156,8 +156,7 @@ export default function FocusPage() {
   };
 
   const navigateToDo = () => {
-    // Do へ戻る。アプリに合わせてパスを変更してください。
-    navigate("/do");
+    navigate("/");
   };
 
   // ------------------ プレースホルダ: タスク/ログ更新 ------------------

@@ -2,7 +2,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useDoPageData } from "../../features/do/hooks/useDoPageData";
-import { doRepository } from "../../repositories/doRepository";
+import { demoDoRepository } from "../../repositories/demoDoRepository";
 import type { NextTask, TodayStats } from "../../types/domain";
 
 /* =========================================================
@@ -12,7 +12,7 @@ import type { NextTask, TodayStats } from "../../types/domain";
 export const DoPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const { state, reload } = useDoPageData(doRepository);
+  const { state, reload } = useDoPageData(demoDoRepository);
 
   if (state.status === "loading") {
     return (
