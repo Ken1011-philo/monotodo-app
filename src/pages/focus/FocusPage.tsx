@@ -173,11 +173,11 @@ export default function FocusPage() {
 
   // ------------------ JSX ------------------
   return (
-    <section className="space-y-8 rounded-3xl bg-background/10 p-10 text-background shadow-xl shadow-black/20 max-w-3xl mx-auto">
+    <section className="mx-auto max-w-3xl space-y-8 rounded-3xl bg-card/70 p-10 text-foreground shadow-xl shadow-black/20">
       <header className="space-y-3 text-center">
-        <p className="text-xs uppercase tracking-[0.4em] text-background/60">Focus</p>
+        <p className="text-xs uppercase tracking-[0.4em] text-muted-foreground">Focus</p>
         <h1 className="text-4xl font-semibold">ポモドーロタイマー</h1>
-        <p className="text-sm text-background/70">
+        <p className="text-sm text-muted-foreground">
           ナビゲーションを排除し、一つのタスクに集中します。
         </p>
       </header>
@@ -191,13 +191,13 @@ export default function FocusPage() {
             strokeWidth={6}
             className="focus-progress"
             styles={buildStyles({
-              textColor: "rgb(255, 255, 255)",
-              pathColor: "var(--background, #fff)",
-              trailColor: "rgba(255,255,255,0.12)",
+              textColor: "var(--foreground)",
+              pathColor: "var(--primary)",
+              trailColor: "var(--border)",
             })}
           />
         </div>
-        <p className="text-sm text-background/70">{isRunning ? "カウント中…" : "一時停止中"}</p>
+        <p className="text-sm text-muted-foreground">{isRunning ? "カウント中…" : "一時停止中"}</p>
       </div>
 
       {/* ボタン群 */}
@@ -211,14 +211,14 @@ export default function FocusPage() {
 
         <button
           onClick={onClickInterrupt}
-          className="rounded-full border border-background/60 px-6 py-2 text-background hover:bg-background/10"
+          className="rounded-full border border-foreground/25 px-6 py-2 text-foreground hover:bg-foreground/10"
         >
           中断
         </button>
 
         <button
           onClick={onClickComplete}
-          className="rounded-full border border-background/60 px-6 py-2 text-background hover:bg-background/10"
+          className="rounded-full border border-foreground/25 px-6 py-2 text-foreground hover:bg-foreground/10"
         >
           終了（完了）
         </button>
@@ -321,7 +321,7 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-lg bg-white p-6 text-black">
+      <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl">
         {children}
       </div>
     </div>

@@ -10,15 +10,14 @@ const navItems = [
 export default function AppLayout() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
-            MonoToDo
-          </p>
-          <h1 className="text-xl font-semibold">
-            “次の一つ”に集中するプランナー
-          </h1>
-        </div>
+      <header className="border-b border-nav-divider bg-nav-background px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <img
+          alt="MonoToDo"
+          className="size-10 object-contain"
+          height={40}
+          src="/monotodo-icon.png"
+          width={40}
+        />
         <nav className="flex gap-3 text-sm font-medium text-muted-foreground">
           {navItems.map((item) => (
             <NavLink
