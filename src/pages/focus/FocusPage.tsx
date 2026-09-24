@@ -1,6 +1,25 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
+import { CheckCircle2, Pause, Play, Square } from "lucide-react";
+
+import { SectionHeader } from "@/components/common/SectionHeader";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 // --- FocusPage: 単一ファイルで完結する実装 ---
 // - タイマー（25:00）
@@ -11,6 +30,19 @@ import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 // - Focus 中はナビ非表示（body にクラス追加）
 // - Back 操作やブラウザ離脱を抑制
 // - Do へ戻るは '/do' へ遷移（必要に応じて変更）
+
+function beforeUnload(e: BeforeUnloadEvent) {
+  // カスタムメッセージは多くのブラウザで無視されるが、警告は表示される
+  e.preventDefault();
+  e.returnValue =
+    "フォーカス中はページ移動できません。中断または完了してから移動してください。";
+  return e.returnValue;
+}
+
+function onPopState() {
+  // popstate（Back）が発生したら履歴を押し戻す
+  window.history.pushState(null, "", window.location.href);
+}
 
 export default function FocusPage() {
   const navigate = useNavigate();
@@ -58,15 +90,6 @@ export default function FocusPage() {
     };
   }, [isRunning]);
 
-  useEffect(() => {
-    // ページアンマウント時にクラス除去
-    return () => {
-      document.body.classList.remove("focus-mode");
-      window.removeEventListener("beforeunload", beforeUnload);
-      window.removeEventListener("popstate", onPopState);
-    };
-  }, []);
-
   // ------------------ ナビ抑制 & ナビバー非表示 ------------------
   useEffect(() => {
     // body にクラスをつけてアプリ側のナビを非表示にする
@@ -88,20 +111,7 @@ export default function FocusPage() {
       window.removeEventListener("beforeunload", beforeUnload);
       window.removeEventListener("popstate", onPopState);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function beforeUnload(e: BeforeUnloadEvent) {
-    // カスタムメッセージは多くのブラウザで無視されるが、警告は表示される
-    e.preventDefault();
-    e.returnValue = "フォーカス中はページ移動できません。中断または完了してから移動してください。";
-    return e.returnValue;
-  }
-
-  function onPopState() {
-    // popstate（Back）が発生したら履歴を押し戻す
-    window.history.pushState(null, "", window.location.href);
-  }
 
   // ------------------ 表示系ユーティリティ ------------------
   const formatTime = (sec: number) => {
@@ -173,18 +183,20 @@ export default function FocusPage() {
 
   // ------------------ JSX ------------------
   return (
-    <section className="mx-auto max-w-3xl space-y-8 rounded-3xl bg-card/70 p-10 text-foreground shadow-xl shadow-black/20">
-      <header className="space-y-3 text-center">
-        <p className="text-xs uppercase tracking-[0.4em] text-muted-foreground">Focus</p>
-        <h1 className="text-4xl font-semibold">ポモドーロタイマー</h1>
-        <p className="text-sm text-muted-foreground">
-          ナビゲーションを排除し、一つのタスクに集中します。
-        </p>
-      </header>
+    <Card className="shadow-xl shadow-black/20">
+      <CardHeader>
+        <SectionHeader
+          as="h1"
+          align="center"
+          eyebrow="Focus"
+          title="ポモドーロタイマー"
+          description="ナビゲーションを排除し、一つのタスクに集中します。"
+        />
+      </CardHeader>
 
       {/* タイマー + プログレス */}
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-56 h-56">
+      <CardContent className="flex flex-col items-center gap-4">
+        <div className="size-56">
           <CircularProgressbar
             value={percent}
             text={formatTime(time)}
@@ -197,133 +209,131 @@ export default function FocusPage() {
             })}
           />
         </div>
-        <p className="text-sm text-muted-foreground">{isRunning ? "カウント中…" : "一時停止中"}</p>
-      </div>
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          {isRunning ? "カウント中…" : "一時停止中"}
+        </p>
+      </CardContent>
 
       {/* ボタン群 */}
-      <div className="flex flex-wrap justify-center gap-4 text-sm font-semibold">
-        <button
-          onClick={toggleRunning}
-          className="rounded-full bg-background px-6 py-2 text-foreground transition hover:bg-background/80"
-        >
+      <CardFooter className="flex-wrap justify-center gap-3">
+        <Button onClick={toggleRunning} size="lg" className="min-w-32">
+          {isRunning ? <Pause /> : <Play />}
           {isRunning ? "一時停止" : "再開"}
-        </button>
+        </Button>
 
-        <button
-          onClick={onClickInterrupt}
-          className="rounded-full border border-foreground/25 px-6 py-2 text-foreground hover:bg-foreground/10"
+        {/* 中断ダイアログ（Trigger を置くことで、閉じた後にフォーカスがボタンへ戻る） */}
+        <Dialog
+          open={showInterruptDialog}
+          onOpenChange={(open) => {
+            if (open) {
+              onClickInterrupt();
+            } else {
+              // Esc / 背景クリックはキャンセル扱い（停止状態のまま）
+              setShowInterruptDialog(false);
+            }
+          }}
         >
-          中断
-        </button>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="lg">
+              <Square />
+              中断
+            </Button>
+          </DialogTrigger>
+          <DialogContent showCloseButton={false} className="bg-card">
+            <DialogHeader>
+              <DialogTitle>セッションを中断しますか？</DialogTitle>
+              <DialogDescription>
+                タスクは完了になりません。セッションを中断しますか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  // キャンセルは何もしない（そのまま停止状態）
+                  setShowInterruptDialog(false);
+                }}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // 続ける: ダイアログ閉じて再開
+                  setShowInterruptDialog(false);
+                  setIsRunning(true);
+                }}
+              >
+                続ける
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setShowInterruptDialog(false);
+                  onConfirmInterruptReturn();
+                }}
+              >
+                中断して戻る
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-        <button
-          onClick={onClickComplete}
-          className="rounded-full border border-foreground/25 px-6 py-2 text-foreground hover:bg-foreground/10"
+        {/* 完了ダイアログ */}
+        <Dialog
+          open={showCompleteDialog}
+          onOpenChange={(open) => {
+            if (open) {
+              onClickComplete();
+            } else {
+              setShowCompleteDialog(false);
+            }
+          }}
         >
-          終了（完了）
-        </button>
-      </div>
-
-      {/* 中断ダイアログ */}
-      {showInterruptDialog && (
-        <Modal onClose={() => setShowInterruptDialog(false)}>
-          <h3 className="text-lg font-semibold">セッションを中断しますか？</h3>
-          <p className="mt-2">タスクは完了になりません。セッションを中断しますか？</p>
-
-          <div className="mt-4 flex gap-2 justify-end">
-            <button
-              onClick={() => {
-                // 続ける: ダイアログ閉じて再開
-                setShowInterruptDialog(false);
-                setIsRunning(true);
-              }}
-              className="rounded px-3 py-1 border"
-            >
-              続ける
-            </button>
-
-            <button
-              onClick={() => {
-                setShowInterruptDialog(false);
-                onConfirmInterruptReturn();
-              }}
-              className="rounded px-3 py-1 bg-red-600 text-white"
-            >
-              中断して戻る
-            </button>
-
-            <button
-              onClick={() => {
-                setShowInterruptDialog(false);
-                // キャンセルは何もしない（そのまま停止状態）
-              }}
-              className="rounded px-3 py-1 border"
-            >
-              キャンセル
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* 完了ダイアログ */}
-      {showCompleteDialog && (
-        <Modal onClose={() => setShowCompleteDialog(false)}>
-          <h3 className="text-lg font-semibold">タスクを完了しますか？</h3>
-          <p className="mt-2">タスクが完了になります。セッションを終了しますか？</p>
-
-          <div className="mt-4 flex gap-2 justify-end">
-            <button
-              onClick={() => {
-                // 完了して戻る
-                onConfirmComplete();
-              }}
-              className="rounded px-3 py-1 bg-green-600 text-white"
-            >
-              完了して戻る
-            </button>
-
-            <button
-              onClick={() => {
-                // 続ける: ダイアログ閉じて再開
-                setShowCompleteDialog(false);
-                setIsRunning(true);
-              }}
-              className="rounded px-3 py-1 border"
-            >
-              続ける
-            </button>
-
-            <button
-              onClick={() => {
-                setShowCompleteDialog(false);
-              }}
-              className="rounded px-3 py-1 border"
-            >
-              キャンセル
-            </button>
-          </div>
-        </Modal>
-      )}
-    </section>
-  );
-}
-
-// ------------------ シンプルなモーダル実装 ------------------
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl">
-        {children}
-      </div>
-    </div>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="lg">
+              <CheckCircle2 />
+              終了（完了）
+            </Button>
+          </DialogTrigger>
+          <DialogContent showCloseButton={false} className="bg-card">
+            <DialogHeader>
+              <DialogTitle>タスクを完了しますか？</DialogTitle>
+              <DialogDescription>
+                タスクが完了になります。セッションを終了しますか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowCompleteDialog(false);
+                }}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // 続ける: ダイアログ閉じて再開
+                  setShowCompleteDialog(false);
+                  setIsRunning(true);
+                }}
+              >
+                続ける
+              </Button>
+              <Button
+                onClick={() => {
+                  // 完了して戻る
+                  onConfirmComplete();
+                }}
+              >
+                完了して戻る
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardFooter>
+    </Card>
   );
 }
