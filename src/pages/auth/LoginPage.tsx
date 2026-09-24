@@ -1,3 +1,16 @@
+import { AlertCircle, LogIn } from "lucide-react";
+
+import { SectionHeader } from "@/components/common/SectionHeader";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabaseClient";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { type Location, useLocation, useNavigate } from "react-router-dom";
@@ -85,68 +98,81 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-secondary/40 px-4 py-12">
-      <div className="w-full max-w-lg space-y-8 rounded-3xl border border-border/60 bg-card/80 p-8 shadow-2xl backdrop-blur">
-        <header className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.4em] text-muted-foreground">
-            MonoToDo
-          </p>
-          <h1 className="text-3xl font-semibold">ログイン</h1>
-          <p className="text-sm text-muted-foreground">
-            {status === "loading"
-              ? "ログインしています..."
-              : "Supabase 認証でメールアドレスとパスワードを確認します。"}
-          </p>
-        </header>
+      <Card className="w-full max-w-lg shadow-2xl">
+        <CardHeader>
+          <SectionHeader
+            as="h1"
+            eyebrow="MonoToDo"
+            title="ログイン"
+            description={
+              status === "loading"
+                ? "ログインしています..."
+                : "Supabase 認証でメールアドレスとパスワードを確認します。"
+            }
+          />
+        </CardHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="space-y-2 text-sm font-medium">
-            メールアドレス
-            <input
-              type="email"
-              name="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              required
-              disabled={disabled}
-              autoComplete="email"
-              className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-base shadow-inner focus:border-primary focus:outline-none"
-            />
-          </label>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login-email">メールアドレス</Label>
+              <Input
+                id="login-email"
+                type="email"
+                name="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                required
+                disabled={disabled}
+                autoComplete="email"
+                aria-invalid={error ? "true" : undefined}
+              />
+            </div>
 
-          <label className="space-y-2 text-sm font-medium">
-            パスワード
-            <input
-              type="password"
-              name="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="••••••••"
-              required
-              disabled={disabled}
-              autoComplete="current-password"
-              className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-base shadow-inner focus:border-primary focus:outline-none"
-            />
-          </label>
+            <div className="space-y-2">
+              <Label htmlFor="login-password">パスワード</Label>
+              <Input
+                id="login-password"
+                type="password"
+                name="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="••••••••"
+                required
+                disabled={disabled}
+                autoComplete="current-password"
+                aria-invalid={error ? "true" : undefined}
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={!email || !password || disabled}
-            className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
-          >
-            {status === "loading" ? "ログイン中..." : "ログイン"}
-          </button>
-        </form>
+            <Button
+              type="submit"
+              size="lg"
+              disabled={!email || !password || disabled}
+              className="w-full"
+            >
+              <LogIn />
+              {status === "loading" ? "ログイン中..." : "ログイン"}
+            </Button>
+          </form>
 
-        {error && (
-          <p className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            エラー: {error}
-          </p>
-        )}
-        <p className="text-sm text-muted-foreground">{message}</p>
+          {error && (
+            <Alert
+              variant="destructive"
+              className="border-destructive/40 bg-destructive/10"
+            >
+              <AlertCircle />
+              <AlertTitle>ログインできませんでした</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
 
-        <footer className="space-y-2 text-sm text-muted-foreground"></footer>
-      </div>
+        <CardFooter>
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
