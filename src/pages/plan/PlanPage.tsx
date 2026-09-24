@@ -52,6 +52,13 @@ const createId = (prefix: string) => {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const createEmptyTask = (): TaskItem => ({
+  id: createId("task"),
+  title: "",
+  isLoop: false,
+  createdAt: Date.now(),
+});
+
 export default function PlanPage() {
   return (
     <section className="space-y-8 rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
@@ -175,9 +182,8 @@ function SubgoalListSection() {
     subgoalId: string;
     taskId: string;
   } | null>(null);
-  const [pendingTaskFocusId, setPendingTaskFocusId] = useState<string | null>(
-    null
-  );
+  // Enter で追加したタスク行に、描画後フォーカスを移すための ID
+  const pendingTaskFocusIdRef = useRef<string | null>(null);
   const taskInputRefs = useRef<Map<string, HTMLInputElement | null>>(
     new Map<string, HTMLInputElement | null>()
   );
@@ -194,14 +200,15 @@ function SubgoalListSection() {
   }, [limitReached]);
 
   useEffect(() => {
-    if (!pendingTaskFocusId) return;
-    const nextInput = taskInputRefs.current.get(pendingTaskFocusId);
+    const pendingId = pendingTaskFocusIdRef.current;
+    if (!pendingId) return;
+    const nextInput = taskInputRefs.current.get(pendingId);
     if (nextInput) {
       nextInput.focus();
       nextInput.select();
-      setPendingTaskFocusId(null);
+      pendingTaskFocusIdRef.current = null;
     }
-  }, [pendingTaskFocusId, subgoals]);
+  }, [subgoals]);
 
   const registerTaskInput = useCallback((taskId: string) => {
     return (element: HTMLInputElement | null) => {
@@ -250,24 +257,18 @@ function SubgoalListSection() {
   }
 
   function addTaskRow(subgoalId: string) {
-    let createdTaskId: string | null = null;
+    const target = subgoals.find((subgoal) => subgoal.id === subgoalId);
+    if (!target || target.tasks.length >= MAX_TASKS_PER_SUBGOAL) return;
+
+    const newTask = createEmptyTask();
+    pendingTaskFocusIdRef.current = newTask.id;
     setSubgoals((prev) =>
-      prev.map((subgoal) => {
-        if (subgoal.id !== subgoalId) return subgoal;
-        if (subgoal.tasks.length >= MAX_TASKS_PER_SUBGOAL) return subgoal;
-        const newTask: TaskItem = {
-          id: createId("task"),
-          title: "",
-          isLoop: false,
-          createdAt: Date.now(),
-        };
-        createdTaskId = newTask.id;
-        return { ...subgoal, tasks: [...subgoal.tasks, newTask] };
-      })
+      prev.map((subgoal) =>
+        subgoal.id === subgoalId
+          ? { ...subgoal, tasks: [...subgoal.tasks, newTask] }
+          : subgoal
+      )
     );
-    if (createdTaskId) {
-      setPendingTaskFocusId(createdTaskId);
-    }
   }
 
   function handleSubgoalTitleKeyDown(
@@ -301,8 +302,7 @@ function SubgoalListSection() {
 
   function handleTaskKeyDown(
     event: React.KeyboardEvent<HTMLInputElement>,
-    subgoalId: string,
-    _taskId: string
+    subgoalId: string
   ) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return;
@@ -579,8 +579,7 @@ type TaskListProps = {
   onTaskTitleChange: (subgoalId: string, taskId: string, value: string) => void;
   onTaskKeyDown: (
     event: React.KeyboardEvent<HTMLInputElement>,
-    subgoalId: string,
-    taskId: string
+    subgoalId: string
   ) => void;
   onToggleLoop: (subgoalId: string, taskId: string) => void;
   onDeleteTask: (subgoalId: string, taskId: string) => void;
@@ -641,7 +640,7 @@ function TaskList({
                 onChange={(event) =>
                   onTaskTitleChange(subgoal.id, task.id, event.target.value)
                 }
-                onKeyDown={(event) => onTaskKeyDown(event, subgoal.id, task.id)}
+                onKeyDown={(event) => onTaskKeyDown(event, subgoal.id)}
                 placeholder="タスクを入力（例：Aマイナーを弾けるようになる）"
                 className="flex-1 min-w-[200px]"
               />
