@@ -1,21 +1,10 @@
 import { Outlet } from "react-router-dom";
 
+// Focus 中はナビゲーションを表示しない。Do ページからのみ遷移し、完了/中断で戻る。
 export default function FocusLayout() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="px-6 py-12 text-center">
-        <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
-          Focus Session
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold">
-          他の操作は隠し、タスクに没頭する時間
-        </h1>
-        <p className="mt-4 text-sm text-muted-foreground">
-          Spec に従い、このレイアウトではナビゲーションを表示しません。Do
-          ページからのみ遷移し、完了時に戻ります。
-        </p>
-      </header>
-      <main className="mx-auto max-w-3xl px-4 pb-12">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 text-foreground">
+      <main className="w-full max-w-3xl">
         <Outlet />
       </main>
     </div>
