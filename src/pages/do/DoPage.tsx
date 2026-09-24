@@ -1,6 +1,19 @@
 // src/pages/do/DoPage.tsx
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { AlertCircle, CalendarPlus, Play } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+
+import { Eyebrow, SectionHeader } from "@/components/common/SectionHeader";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDoPageData } from "../../features/do/hooks/useDoPageData";
 import { demoDoRepository } from "../../repositories/demoDoRepository";
 import type { NextTask, TodayStats } from "../../types/domain";
@@ -16,25 +29,19 @@ export const DoPage: React.FC = () => {
 
   if (state.status === "loading") {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-background">
-        <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-          <NowCardSkeleton />
-          <TodayCardSkeleton />
-        </main>
+      <div className="flex flex-col gap-6">
+        <NowCardSkeleton />
+        <TodayCardSkeleton />
       </div>
     );
   }
 
   if (state.status === "error") {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-background">
-        <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-          <ErrorCard
-            message={state.error ?? "タスク情報の取得に失敗しました。"}
-            onRetry={reload}
-          />
-        </main>
-      </div>
+      <ErrorCard
+        message={state.error ?? "タスク情報の取得に失敗しました。"}
+        onRetry={reload}
+      />
     );
   }
 
@@ -48,11 +55,9 @@ export const DoPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-background">
-      <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-        {task ? <NowCard task={task} onStart={handleStart} /> : <EmptyNowCard />}
-        {stats && <TodayCard stats={stats} />}
-      </main>
+    <div className="flex flex-col gap-6">
+      {task ? <NowCard task={task} onStart={handleStart} /> : <EmptyNowCard />}
+      {stats && <TodayCard stats={stats} />}
     </div>
   );
 };
@@ -70,76 +75,44 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
   const progress = Math.max(0, Math.min(100, task.subgoalProgress ?? 0));
 
   return (
-    <section className="rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
-      <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-          Now
-        </p>
-        <h2 className="text-2xl font-semibold text-card-foreground">
-          今やるタスク
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          いま集中するタスクはこれだけです。
-        </p>
-      </header>
+    <Card>
+      <CardHeader>
+        <SectionHeader
+          eyebrow="Now"
+          title="今やるタスク"
+          description="いま集中するタスクはこれだけです。"
+        />
+      </CardHeader>
 
-      <div className="mt-6 space-y-5">
+      <CardContent className="space-y-5">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-            Subgoal
-          </p>
-          <p className="text-xl font-semibold text-card-foreground">
-            {task.subgoalTitle}
-          </p>
+          <Eyebrow>Subgoal</Eyebrow>
+          <p className="text-xl font-semibold">{task.subgoalTitle}</p>
         </div>
 
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-            Task
-          </p>
-          <p className="text-xl font-semibold text-card-foreground">
-            {task.title}
-          </p>
+          <Eyebrow>Task</Eyebrow>
+          <p className="text-xl font-semibold">{task.title}</p>
         </div>
 
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-              Subgoal Progress
-            </p>
-            <span className="text-xs font-mono text-muted-foreground">
+            <Eyebrow>Subgoal Progress</Eyebrow>
+            <span className="font-mono text-xs text-muted-foreground">
               {progress}%
             </span>
           </div>
-
-          <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          <Progress value={progress} aria-label="サブゴールの進捗" />
         </div>
+      </CardContent>
 
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={onStart}
-            className="
-              inline-flex w-full items-center justify-center
-              rounded-full bg-primary px-6 py-2.5
-              text-sm font-medium text-primary-foreground
-              shadow-sm hover:bg-primary/90
-              focus-visible:outline-none focus-visible:ring-2
-              focus-visible:ring-ring/70 focus-visible:ring-offset-2
-              disabled:pointer-events-none disabled:opacity-60
-              sm:w-auto
-            "
-          >
-            タスク開始
-          </button>
-        </div>
-      </div>
-    </section>
+      <CardFooter>
+        <Button size="lg" onClick={onStart} className="w-full sm:w-auto">
+          <Play />
+          タスク開始
+        </Button>
+      </CardFooter>
+    </Card>
   );
 };
 
@@ -148,30 +121,29 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
  * =======================================================*/
 
 const EmptyNowCard: React.FC = () => (
-  <section
-    className="
-      rounded-2xl border border-border
-      bg-card/90
-      shadow-[0_18px_45px_rgba(0,0,0,0.18)]
-    "
-  >
-    <div className="px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
-      <h2 className="mb-2 text-[1.35rem] font-semibold text-card-foreground">
-        今やるタスクはありません
-      </h2>
-      <p className="mb-3 text-sm text-muted-foreground">
-        今日やるタスクは Plan ページで決めてください。
-      </p>
-      <p className="text-xs text-muted-foreground">
-        Plan で「今日やる」を設定すると、ここに 1 件だけ表示されます。
-      </p>
-    </div>
-  </section>
+  <Card>
+    <CardHeader>
+      <SectionHeader
+        eyebrow="Now"
+        title="今やるタスクはありません"
+        description="今日やるタスクは Plan ページで決めてください。Plan の一番上のタスクが、ここに 1 件だけ表示されます。"
+      />
+    </CardHeader>
+    <CardFooter>
+      <Button asChild variant="outline">
+        <Link to="/plan">
+          <CalendarPlus />
+          Plan を開く
+        </Link>
+      </Button>
+    </CardFooter>
+  </Card>
 );
 
 /* =========================================================
  * 今日の記録カード（TodayStats前提）
  * =======================================================*/
+
 interface TodayCardProps {
   stats: TodayStats;
 }
@@ -182,102 +154,73 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
     totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   return (
-    <section className="rounded-3xl border border-border/80 bg-card/70 p-8 shadow-sm">
-      <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-          Today
-        </p>
-        <h2 className="text-2xl font-semibold text-card-foreground">
-          今日の記録
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          今日の進捗サマリーです。数値だけを見て次の意思決定を軽くします。
-        </p>
-      </header>
+    <Card>
+      <CardHeader>
+        <SectionHeader
+          eyebrow="Today"
+          title="今日の記録"
+          description="今日の進捗サマリーです。数値だけを見て次の意思決定を軽くします。"
+        />
+      </CardHeader>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-            Total Tasks
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-card-foreground">
-            {totalTasks} <span className="text-base font-medium">個</span>
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-            Completed
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-card-foreground">
-            {completedTasks} <span className="text-base font-medium">個</span>
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-            Completion Rate
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-card-foreground">
-            {rate} <span className="text-base font-medium">%</span>
-          </p>
-        </div>
-      </div>
-    </section>
+      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatTile label="Total Tasks" value={totalTasks} unit="個" />
+        <StatTile label="Completed" value={completedTasks} unit="個" />
+        <StatTile label="Completion Rate" value={rate} unit="%" />
+      </CardContent>
+    </Card>
   );
 };
+
+interface StatTileProps {
+  label: string;
+  value: number;
+  unit: string;
+}
+
+const StatTile: React.FC<StatTileProps> = ({ label, value, unit }) => (
+  <div className="rounded-lg border bg-background/60 p-4">
+    <Eyebrow>{label}</Eyebrow>
+    <p className="mt-1 text-2xl font-semibold">
+      {value} <span className="text-base font-medium">{unit}</span>
+    </p>
+  </div>
+);
 
 /* =========================================================
  * ローディング用スケルトン
  * =======================================================*/
 
 const NowCardSkeleton: React.FC = () => (
-  <section
-    className="
-      rounded-2xl border border-border
-      bg-card/90
-      shadow-[0_18px_45px_rgba(0,0,0,0.18)]
-      animate-pulse
-    "
-  >
-    <div className="space-y-3 px-6 pb-5 pt-6 sm:px-6 sm:pb-5 sm:pt-6">
-      <div className="h-4 w-1/3 rounded-full bg-muted" />
-      <div className="h-3 w-1/2 rounded-full bg-muted" />
-      <div className="mt-3 h-2 w-full rounded-full bg-muted" />
-      <div className="flex flex-wrap gap-2.5 pt-2">
-        <div className="h-9 w-28 rounded-full bg-muted" />
-        <div className="h-9 w-28 rounded-full bg-muted" />
-        <div className="h-9 w-28 rounded-full bg-muted" />
-      </div>
-    </div>
-  </section>
+  <Card aria-busy="true" aria-label="読み込み中">
+    <CardHeader className="space-y-2">
+      <Skeleton className="h-3 w-16" />
+      <Skeleton className="h-7 w-48" />
+      <Skeleton className="h-4 w-64" />
+    </CardHeader>
+    <CardContent className="space-y-5">
+      <Skeleton className="h-6 w-1/2" />
+      <Skeleton className="h-6 w-2/3" />
+      <Skeleton className="h-2 w-full" />
+    </CardContent>
+    <CardFooter>
+      <Skeleton className="h-10 w-32" />
+    </CardFooter>
+  </Card>
 );
 
 const TodayCardSkeleton: React.FC = () => (
-  <section
-    className="
-      rounded-2xl border border-border
-      bg-card/95
-      px-6 py-5
-      animate-pulse
-    "
-  >
-    <div className="mb-3 h-4 w-32 rounded-full bg-muted" />
-    <div
-      className="
-        grid grid-cols-1 gap-2.5
-        sm:grid-cols-2
-        lg:grid-cols-3
-      "
-    >
+  <Card aria-busy="true" aria-label="読み込み中">
+    <CardHeader className="space-y-2">
+      <Skeleton className="h-3 w-16" />
+      <Skeleton className="h-7 w-40" />
+    </CardHeader>
+    <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="space-y-2 rounded-md bg-muted px-3 py-2.5">
-          <div className="h-3 w-1/2 rounded-full bg-background/60" />
-          <div className="h-4 w-1/3 rounded-full bg-background/60" />
-        </div>
+        <Skeleton key={i} className="h-20 w-full rounded-lg" />
       ))}
-    </div>
-  </section>
+    </CardContent>
+  </Card>
 );
 
 /* =========================================================
@@ -290,34 +233,16 @@ interface ErrorCardProps {
 }
 
 const ErrorCard: React.FC<ErrorCardProps> = ({ message, onRetry }) => (
-  <section
-    className="
-      rounded-2xl border border-destructive/40
-      bg-destructive/10
-      px-6 py-5
-    "
-  >
-    <h2 className="mb-2 text-[1.05rem] font-semibold text-destructive">
-      読み込みエラー
-    </h2>
-    <p className="mb-4 text-sm text-destructive">{message}</p>
-    <button
-      type="button"
-      onClick={onRetry}
-      className="
-        inline-flex items-center justify-center
-        rounded-full
-        bg-destructive px-4 py-2
-        text-sm font-medium text-destructive-foreground
-        shadow-sm
-        hover:bg-destructive/90
-        focus-visible:outline-none focus-visible:ring-2
-        focus-visible:ring-destructive focus-visible:ring-offset-2
-      "
-    >
-      もう一度読み込む
-    </button>
-  </section>
+  <Alert variant="destructive" className="border-destructive/40 bg-destructive/10">
+    <AlertCircle />
+    <AlertTitle>読み込みエラー</AlertTitle>
+    <AlertDescription className="gap-3">
+      <p>{message}</p>
+      <Button variant="destructive" size="sm" onClick={onRetry}>
+        もう一度読み込む
+      </Button>
+    </AlertDescription>
+  </Alert>
 );
 
 export default DoPage;
