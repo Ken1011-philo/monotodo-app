@@ -6,7 +6,9 @@ import { usePlanDraft } from "@/features/plan/hooks/usePlanDraft";
 import { GoalEditor } from "./GoalEditor";
 import { PlanSidebar } from "./PlanSidebar";
 import { SubgoalAddForm } from "./SubgoalAddForm";
+import { SubgoalSwitcher } from "./SubgoalSwitcher";
 import { SubgoalTaskPanel } from "./SubgoalTaskPanel";
+import { subgoalLabel } from "./planLabels";
 
 /** Plan ページ：状態（usePlanDraft）と各部品をつなぐだけのコンテナ */
 export default function PlanPage() {
@@ -25,6 +27,27 @@ export default function PlanPage() {
     input.focus({ preventScroll: true });
   };
 
+  // PC のサイドとスマホの Sheet で同じロードマップを使う。違いは選択後などの後処理だけ
+  const renderSidebar = (options?: {
+    afterSelect?: () => void;
+    onGoalClick?: () => void;
+  }) => (
+    <PlanSidebar
+      goalTitle={plan.goalTitle}
+      subgoals={plan.subgoals}
+      selectedSubgoalId={selectedSubgoal?.id ?? null}
+      canAddSubgoal={plan.canAddSubgoal}
+      onSelect={(id) => {
+        plan.selectSubgoal(id);
+        options?.afterSelect?.();
+      }}
+      onMove={plan.moveSubgoal}
+      onDelete={plan.deleteSubgoal}
+      onAdd={plan.addSubgoal}
+      onGoalClick={options?.onGoalClick ?? focusGoalInput}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader
@@ -37,22 +60,31 @@ export default function PlanPage() {
       <div className="grid items-start gap-6 md:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="hidden md:sticky md:top-6 md:block">
           <Card className="max-h-[calc(100vh-3rem)] overflow-y-auto px-2 py-4">
-            <PlanSidebar
-              goalTitle={plan.goalTitle}
-              subgoals={plan.subgoals}
-              selectedSubgoalId={selectedSubgoal?.id ?? null}
-              canAddSubgoal={plan.canAddSubgoal}
-              onSelect={plan.selectSubgoal}
-              onMove={plan.moveSubgoal}
-              onDelete={plan.deleteSubgoal}
-              onAdd={plan.addSubgoal}
-              onGoalClick={focusGoalInput}
-            />
+            {renderSidebar()}
           </Card>
         </aside>
 
+        <div className="md:hidden">
+          <SubgoalSwitcher
+            currentLabel={
+              selectedSubgoal
+                ? subgoalLabel(selectedSubgoal, selectedIndex)
+                : null
+            }
+            position={selectedIndex + 1}
+            total={plan.subgoals.length}
+          >
+            {(closeThen) =>
+              renderSidebar({
+                afterSelect: () => closeThen(),
+                onGoalClick: () => closeThen(focusGoalInput),
+              })
+            }
+          </SubgoalSwitcher>
+        </div>
+
         <Card>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 px-4 sm:px-6">
             <GoalEditor
               savedTitle={plan.goalTitle}
               onSave={plan.saveGoalTitle}

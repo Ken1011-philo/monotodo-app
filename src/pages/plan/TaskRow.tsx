@@ -51,7 +51,8 @@ export function TaskRow({
       )}
     >
       <DragHandle handleProps={handleProps} label={`${label}を並べ替え`} />
-      <span className="w-5 shrink-0 text-right text-xs font-semibold text-muted-foreground">
+      {/* スマホでは入力欄の幅を優先して番号を省く（aria-label に番号を含む） */}
+      <span className="hidden w-5 shrink-0 text-right text-xs font-semibold text-muted-foreground sm:inline">
         {index + 1}.
       </span>
       <Input
@@ -71,7 +72,7 @@ export function TaskRow({
         aria-label={`${label}：${task.isLoop ? "定期" : "一回"}（切り替え）`}
         onClick={onToggleLoop}
         className={cn(
-          "w-16 shrink-0 text-xs",
+          "w-16 shrink-0 px-2 text-xs",
           task.isLoop &&
             "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary dark:border-primary/40 dark:bg-primary/10"
         )}
