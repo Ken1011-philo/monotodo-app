@@ -55,7 +55,7 @@ export default function PlanPage() {
 
       {/* ロードマップ｜メイン｜右列。右列は今後追加するカード（ロードマップと同じ幅）のために空けておく。
           xl 未満では右列まで取るとメインが狭くなりすぎるため 2 列にする */}
-      <div className="grid items-start gap-6 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)_17rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_20rem]">
+      <div className="grid items-start gap-6 md:grid-cols-[17rem_minmax(0,1fr)] lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)_19rem] 2xl:grid-cols-[21rem_minmax(0,1fr)_21rem]">
         {/* ロードマップはカードで囲まず、ページ背景の上に置く（作業場所のメインカードを目立たせる） */}
         <aside className="hidden max-h-[calc(100vh-3rem)] overflow-y-auto px-2 py-6 [--roadmap-surface:var(--background)] md:sticky md:top-6 md:block">
           {renderSidebar()}
