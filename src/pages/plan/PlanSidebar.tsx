@@ -226,11 +226,18 @@ function RoadmapRow({
  * ノード（丸印）。完了状態は DB 設計後にここへ追加する
  * -------------------------------------------------------*/
 
+// 縦線を隠すため、ノードは背後の面と同じ色で塗る。
+// 面の色は置き場所（PC のサイド欄 / スマホの Sheet）が --roadmap-surface で渡す。未指定ならカード色
+const nodeFill = "bg-[var(--roadmap-surface,var(--card))]";
+
 function StartNode() {
   return (
     <span
       aria-hidden
-      className="block size-3 rounded-full border-2 border-muted-foreground bg-card"
+      className={cn(
+        "block size-3 rounded-full border-2 border-muted-foreground",
+        nodeFill
+      )}
     />
   );
 }
@@ -243,7 +250,7 @@ function SubgoalNode({ selected }: { selected: boolean }) {
         "block size-3.5 rounded-full border-2",
         selected
           ? "border-primary bg-primary shadow-[0_0_0_4px] shadow-primary/20"
-          : "border-muted-foreground bg-card"
+          : cn("border-muted-foreground", nodeFill)
       )}
     />
   );
@@ -253,7 +260,10 @@ function AddNode() {
   return (
     <span
       aria-hidden
-      className="block size-2.5 rounded-full border border-dashed border-muted-foreground bg-card"
+      className={cn(
+        "block size-2.5 rounded-full border border-dashed border-muted-foreground",
+        nodeFill
+      )}
     />
   );
 }
@@ -262,7 +272,10 @@ function GoalNode() {
   return (
     <span
       aria-hidden
-      className="flex size-5 items-center justify-center rounded-full border-2 border-primary bg-card"
+      className={cn(
+        "flex size-5 items-center justify-center rounded-full border-2 border-primary",
+        nodeFill
+      )}
     >
       <span className="block size-2 rounded-full bg-primary" />
     </span>
