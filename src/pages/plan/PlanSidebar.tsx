@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Repeat, Trash2 } from "lucide-react";
 
 import { DragHandle, SortableList } from "@/components/common/SortableList";
@@ -37,12 +37,15 @@ export function PlanSidebar({
   onGoalClick,
 }: PlanSidebarProps) {
   const [pendingDelete, setPendingDelete] = useState<DraftSubgoal | null>(null);
+  const navRef = useRef<HTMLElement>(null);
+  // 削除確認を開いた 🗑 ボタン。キャンセル時はここへ、削除時は選択中の項目へフォーカスを戻す
+  const deleteTriggerRef = useRef<HTMLElement | null>(null);
   const pendingIndex = pendingDelete
     ? subgoals.findIndex((s) => s.id === pendingDelete.id)
     : -1;
 
   return (
-    <nav aria-label="サブゴールのロードマップ" className="relative">
+    <nav ref={navRef} aria-label="サブゴールのロードマップ" className="relative">
       {/* ノードをつなぐ縦線（ハンドル列 2rem + ノード中心 0.625rem の位置） */}
       <div
         aria-hidden
@@ -81,7 +84,10 @@ export function PlanSidebar({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`${label}を削除`}
-                  onClick={() => setPendingDelete(subgoal)}
+                  onClick={(event) => {
+                    deleteTriggerRef.current = event.currentTarget;
+                    setPendingDelete(subgoal);
+                  }}
                   className={cn(
                     "shrink-0 text-muted-foreground transition-opacity",
                     // PC ではホバー / フォーカス / 選択中のみ表示。タッチ端末（md 未満）は常に表示
@@ -173,6 +179,12 @@ export function PlanSidebar({
           setPendingDelete(null);
         }}
         onCancel={() => setPendingDelete(null)}
+        getReturnFocusTarget={() => {
+          const trigger = deleteTriggerRef.current;
+          deleteTriggerRef.current = null;
+          if (trigger?.isConnected) return trigger;
+          return navRef.current?.querySelector<HTMLElement>("[aria-current]") ?? null;
+        }}
       />
     </nav>
   );
