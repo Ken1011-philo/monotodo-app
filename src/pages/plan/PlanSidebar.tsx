@@ -1,0 +1,258 @@
+import { useState, type ReactNode } from "react";
+import { Repeat, Trash2 } from "lucide-react";
+
+import { DragHandle, SortableList } from "@/components/common/SortableList";
+import { Button } from "@/components/ui/button";
+import type { DraftSubgoal } from "@/features/plan/model/planDraft";
+import { cn } from "@/lib/utils";
+import { DeleteSubgoalDialog } from "./DeleteSubgoalDialog";
+import { SubgoalAddForm } from "./SubgoalAddForm";
+import { subgoalLabel } from "./planLabels";
+
+type PlanSidebarProps = {
+  goalTitle: string;
+  subgoals: DraftSubgoal[];
+  selectedSubgoalId: string | null;
+  canAddSubgoal: boolean;
+  onSelect: (subgoalId: string) => void;
+  onMove: (activeId: string, overId: string) => void;
+  onDelete: (subgoalId: string) => void;
+  onAdd: (title: string) => string | null;
+  onGoalClick: () => void;
+};
+
+/**
+ * スタート → サブゴール… → Goal のロードマップ。
+ * PC のサイドとスマホの Sheet の両方で使うため、表示と操作の受け渡しだけを担う。
+ */
+export function PlanSidebar({
+  goalTitle,
+  subgoals,
+  selectedSubgoalId,
+  canAddSubgoal,
+  onSelect,
+  onMove,
+  onDelete,
+  onAdd,
+  onGoalClick,
+}: PlanSidebarProps) {
+  const [pendingDelete, setPendingDelete] = useState<DraftSubgoal | null>(null);
+  const pendingIndex = pendingDelete
+    ? subgoals.findIndex((s) => s.id === pendingDelete.id)
+    : -1;
+
+  return (
+    <nav aria-label="サブゴールのロードマップ" className="relative">
+      {/* ノードをつなぐ縦線（ハンドル列 2rem + ノード中心 0.625rem の位置） */}
+      <div
+        aria-hidden
+        className="absolute top-4 bottom-5 left-[calc(2rem+0.625rem-1px)] w-0.5 rounded-full bg-border"
+      />
+
+      <RoadmapRow node={<StartNode />}>
+        <span className="px-2 text-sm text-muted-foreground">スタート</span>
+      </RoadmapRow>
+
+      <SortableList
+        as="ol"
+        items={subgoals}
+        onMove={onMove}
+        getItemLabel={subgoalLabel}
+        renderItem={(subgoal, index, { handleProps, isDragging }) => {
+          const label = subgoalLabel(subgoal, index);
+          const selected = subgoal.id === selectedSubgoalId;
+          const hasLoop = subgoal.tasks.some((t) => t.isLoop);
+          return (
+            <RoadmapRow
+              className={cn(
+                "group rounded-lg",
+                isDragging && "bg-accent shadow-lg ring-1 ring-primary/40"
+              )}
+              handle={
+                <DragHandle
+                  handleProps={handleProps}
+                  label={`${label}を並べ替え`}
+                />
+              }
+              node={<SubgoalNode selected={selected} />}
+              trailing={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`${label}を削除`}
+                  onClick={() => setPendingDelete(subgoal)}
+                  className={cn(
+                    "shrink-0 text-muted-foreground transition-opacity",
+                    // PC ではホバー / フォーカス / 選択中のみ表示。タッチ端末（md 未満）は常に表示
+                    !selected &&
+                      "md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                  )}
+                >
+                  <Trash2 />
+                </Button>
+              }
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                aria-current={selected ? "true" : undefined}
+                onClick={() => onSelect(subgoal.id)}
+                title={label}
+                className={cn(
+                  "h-auto w-full min-w-0 justify-start px-2 py-1.5 text-left font-normal",
+                  selected && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+                )}
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span
+                    className={cn(
+                      "truncate text-sm",
+                      selected && "font-semibold",
+                      !subgoal.title.trim() && "text-muted-foreground"
+                    )}
+                  >
+                    {label}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    {subgoal.tasks.length}件
+                    {hasLoop && (
+                      <>
+                        <Repeat className="size-3" aria-hidden />
+                        <span className="sr-only">定期タスクあり</span>
+                      </>
+                    )}
+                  </span>
+                </span>
+              </Button>
+            </RoadmapRow>
+          );
+        }}
+      />
+
+      <RoadmapRow node={<AddNode />} className="py-2">
+        <SubgoalAddForm
+          count={subgoals.length}
+          canAdd={canAddSubgoal}
+          onAdd={onAdd}
+          className="pl-2"
+        />
+      </RoadmapRow>
+
+      <RoadmapRow node={<GoalNode />}>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onGoalClick}
+          title={goalTitle || undefined}
+          className="h-auto w-full min-w-0 justify-start px-2 py-1.5 text-left"
+        >
+          <span className="flex min-w-0 flex-col">
+            <span className="text-xs font-normal text-muted-foreground">Goal</span>
+            <span
+              className={cn(
+                "truncate text-sm",
+                !goalTitle && "font-normal text-muted-foreground"
+              )}
+            >
+              {goalTitle || "ゴール未設定"}
+            </span>
+          </span>
+        </Button>
+      </RoadmapRow>
+
+      <DeleteSubgoalDialog
+        subgoal={pendingDelete}
+        label={
+          pendingDelete && pendingIndex !== -1
+            ? subgoalLabel(pendingDelete, pendingIndex)
+            : ""
+        }
+        onConfirm={(id) => {
+          onDelete(id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
+    </nav>
+  );
+}
+
+/* ---------------------------------------------------------
+ * レイアウト：[ハンドル 2rem][ノード 1.25rem][本文][末尾]
+ * -------------------------------------------------------*/
+
+function RoadmapRow({
+  handle,
+  node,
+  trailing,
+  children,
+  className,
+}: {
+  handle?: ReactNode;
+  node: ReactNode;
+  trailing?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative grid grid-cols-[2rem_1.25rem_minmax(0,1fr)_auto] items-center py-0.5",
+        className
+      )}
+    >
+      <div className="flex justify-center">{handle}</div>
+      <div className="relative z-1 flex justify-center">{node}</div>
+      <div className="min-w-0">{children}</div>
+      <div className="flex justify-end">{trailing}</div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+ * ノード（丸印）。完了状態は DB 設計後にここへ追加する
+ * -------------------------------------------------------*/
+
+function StartNode() {
+  return (
+    <span
+      aria-hidden
+      className="block size-3 rounded-full border-2 border-muted-foreground bg-card"
+    />
+  );
+}
+
+function SubgoalNode({ selected }: { selected: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "block size-3.5 rounded-full border-2",
+        selected
+          ? "border-primary bg-primary shadow-[0_0_0_4px] shadow-primary/20"
+          : "border-muted-foreground bg-card"
+      )}
+    />
+  );
+}
+
+function AddNode() {
+  return (
+    <span
+      aria-hidden
+      className="block size-2.5 rounded-full border border-dashed border-muted-foreground bg-card"
+    />
+  );
+}
+
+function GoalNode() {
+  return (
+    <span
+      aria-hidden
+      className="flex size-5 items-center justify-center rounded-full border-2 border-primary bg-card"
+    >
+      <span className="block size-2 rounded-full bg-primary" />
+    </span>
+  );
+}
