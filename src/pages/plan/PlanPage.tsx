@@ -57,7 +57,7 @@ export default function PlanPage() {
         description="目標をサブゴールとタスクに分解します。一番上のサブゴールのタスクが Do ページに表示されます。"
       />
 
-      <div className="grid items-start gap-6 md:grid-cols-[17rem_minmax(0,1fr)]">
+      <div className="grid items-start gap-6 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]">
         <aside className="hidden md:sticky md:top-6 md:block">
           <Card className="max-h-[calc(100vh-3rem)] overflow-y-auto px-2 py-4">
             {renderSidebar()}
