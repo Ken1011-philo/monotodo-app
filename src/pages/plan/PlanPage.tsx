@@ -50,12 +50,8 @@ export default function PlanPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader
-        as="h1"
-        eyebrow="Plan"
-        title="計画"
-        description="目標をサブゴールとタスクに分解します。一番上のサブゴールのタスクが Do ページに表示されます。"
-      />
+      {/* 画面上の見出しは置かず、読み上げ用のページ見出しだけ残す */}
+      <h1 className="sr-only">計画</h1>
 
       {/* ロードマップ｜メイン｜右列。右列は今後追加するカード（ロードマップと同じ幅）のために空けておく。
           xl 未満では右列まで取るとメインが狭くなりすぎるため 2 列にする */}
