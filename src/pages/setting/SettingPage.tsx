@@ -14,7 +14,8 @@ import {
 
 export default function SettingPage() {
   return (
-    <div className="flex flex-col gap-6">
+    // 設定項目は少ないため、GitHub の設定画面と同様に読みやすい幅（768px）で左寄せにする
+    <div className="flex max-w-3xl flex-col gap-6">
       <SectionHeader
         as="h1"
         eyebrow="Setting"
