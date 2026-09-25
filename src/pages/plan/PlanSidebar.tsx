@@ -45,11 +45,16 @@ export function PlanSidebar({
     : -1;
 
   return (
-    <nav ref={navRef} aria-label="サブゴールのロードマップ" className="relative">
-      {/* ノードをつなぐ縦線（ハンドル列 2rem + ノード中心 0.625rem の位置） */}
+    <nav
+      ref={navRef}
+      aria-label="サブゴールのロードマップ"
+      // --handle-col: ハンドル列の幅。行の列定義と縦線の位置で共有する
+      className="relative [--handle-col:2.5rem]"
+    >
+      {/* ノードをつなぐ縦線（ハンドル列 + ノード中心 0.625rem の位置） */}
       <div
         aria-hidden
-        className="absolute top-4 bottom-5 left-[calc(2rem+0.625rem-1px)] w-0.5 rounded-full bg-border"
+        className="absolute top-4 bottom-5 left-[calc(var(--handle-col)+0.625rem-1px)] w-0.5 rounded-full bg-border"
       />
 
       <RoadmapRow node={<StartNode />}>
@@ -113,7 +118,7 @@ export function PlanSidebar({
                 <span className="flex min-w-0 flex-col">
                   <span
                     className={cn(
-                      "truncate text-sm",
+                      "truncate text-base",
                       selected && "font-semibold",
                       !subgoal.title.trim() && "text-muted-foreground"
                     )}
@@ -157,7 +162,7 @@ export function PlanSidebar({
             <span className="text-xs font-normal text-muted-foreground">Goal</span>
             <span
               className={cn(
-                "truncate text-sm",
+                "truncate text-base",
                 !goalTitle && "font-normal text-muted-foreground"
               )}
             >
@@ -191,7 +196,7 @@ export function PlanSidebar({
 }
 
 /* ---------------------------------------------------------
- * レイアウト：[ハンドル 2rem][ノード 1.25rem][本文][末尾]
+ * レイアウト：[ハンドル --handle-col][ノード 1.25rem][本文][末尾]
  * -------------------------------------------------------*/
 
 function RoadmapRow({
@@ -210,7 +215,7 @@ function RoadmapRow({
   return (
     <div
       className={cn(
-        "relative grid grid-cols-[2rem_1.25rem_minmax(0,1fr)_auto] items-center py-0.5",
+        "relative grid grid-cols-[var(--handle-col)_1.25rem_minmax(0,1fr)_auto] items-center py-0.5",
         className
       )}
     >

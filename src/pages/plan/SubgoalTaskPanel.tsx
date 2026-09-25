@@ -69,7 +69,7 @@ export function SubgoalTaskPanel({
           onKeyDown={handleTitleKeyDown}
           placeholder="サブゴールタイトル（例：マリーゴールドを弾けるようになる）"
           aria-label={`サブゴール${index + 1}のタイトル`}
-          className="h-11 text-lg font-semibold md:text-lg"
+          className="h-11 text-lg font-semibold"
         />
         <p className="text-xs text-muted-foreground">
           Enter で新しいタスク行を追加します。
