@@ -29,18 +29,22 @@ export const DoPage: React.FC = () => {
 
   if (state.status === "loading") {
     return (
-      <div className="flex flex-col gap-6">
-        <NowCardSkeleton />
-        <TodayCardSkeleton />
-      </div>
+      <DoPageLayout
+        main={<NowCardSkeleton />}
+        aside={<TodayCardSkeleton />}
+      />
     );
   }
 
   if (state.status === "error") {
     return (
-      <ErrorCard
-        message={state.error ?? "タスク情報の取得に失敗しました。"}
-        onRetry={reload}
+      <DoPageLayout
+        main={
+          <ErrorCard
+            message={state.error ?? "タスク情報の取得に失敗しました。"}
+            onRetry={reload}
+          />
+        }
       />
     );
   }
@@ -55,12 +59,35 @@ export const DoPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {task ? <NowCard task={task} onStart={handleStart} /> : <EmptyNowCard />}
-      {stats && <TodayCard stats={stats} />}
-    </div>
+    <DoPageLayout
+      main={
+        task ? <NowCard task={task} onStart={handleStart} /> : <EmptyNowCard />
+      }
+      aside={stats ? <TodayCard stats={stats} /> : null}
+    />
   );
 };
+
+/* =========================================================
+ * ページの割り付け
+ * 広い画面（lg 以上）では「今やるタスク」をメイン列、今日の記録を右列に置く
+ * =======================================================*/
+
+interface DoPageLayoutProps {
+  main: React.ReactNode;
+  aside?: React.ReactNode;
+}
+
+const DoPageLayout: React.FC<DoPageLayoutProps> = ({ main, aside }) => (
+  <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="flex min-w-0 flex-col gap-6">{main}</div>
+    {aside && (
+      <aside aria-label="今日の記録" className="flex flex-col gap-6">
+        {aside}
+      </aside>
+    )}
+  </div>
+);
 
 /* =========================================================
  * 「今やるタスク」カード（NextTask前提）
@@ -154,7 +181,7 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
     totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   return (
-    <Card>
+    <Card className="@container/today">
       <CardHeader>
         <SectionHeader
           eyebrow="Today"
@@ -163,7 +190,8 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
         />
       </CardHeader>
 
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* カード自身の幅で並びを切り替える（右列では縦並び、全幅では横に 3 つ） */}
+      <CardContent className="grid grid-cols-1 gap-4 @md/today:grid-cols-3">
         <StatTile label="Total Tasks" value={totalTasks} unit="個" />
         <StatTile label="Completed" value={completedTasks} unit="個" />
         <StatTile label="Completion Rate" value={rate} unit="%" />
@@ -210,12 +238,12 @@ const NowCardSkeleton: React.FC = () => (
 );
 
 const TodayCardSkeleton: React.FC = () => (
-  <Card aria-busy="true" aria-label="読み込み中">
+  <Card aria-busy="true" aria-label="読み込み中" className="@container/today">
     <CardHeader className="space-y-2">
       <Skeleton className="h-3 w-16" />
       <Skeleton className="h-7 w-40" />
     </CardHeader>
-    <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <CardContent className="grid grid-cols-1 gap-4 @md/today:grid-cols-3">
       {[0, 1, 2].map((i) => (
         <Skeleton key={i} className="h-20 w-full rounded-lg" />
       ))}
