@@ -1,7 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource-variable/noto-sans-jp";
 
 @custom-variant dark (&:is(.dark *));
+
+/*
+ * 文字の土台（日本語 UI 向けに Tailwind の既定値を調整）
+ * - フォント: 字面が大きく読みやすい Noto Sans JP を同梱（外部通信なし）
+ * - サイズ: 主役の文字 16px（base）、補助 15px（sm）、付帯情報 13px（xs）
+ *   GitHub / デジタル庁 / SmartHR の実測・指針（主役 16px 前後、補助 12〜14px、行間 1.5 倍以上）を参考
+ * - 行間: 日本語の複数行に合わせて 1.5〜1.6 倍（Tailwind 既定は sm で約 1.43 倍）
+ */
+@theme {
+  --font-sans: "Noto Sans JP Variable", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.6;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
+}
 :root {
   color-scheme: dark;
   --radius: 0.625rem;
