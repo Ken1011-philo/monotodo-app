@@ -1,5 +1,8 @@
 // Plan ページの編集状態（ブラウザ内のみ）を扱う純粋なモデル。
 // React や UI ライブラリに依存させず、DB 設計の刷新時はこの層ごと差し替えられるようにする。
+// 完了状態の考え方: docs/specs/recurring-task-completion.md
+
+import type { ActivityDate } from "./activityDate";
 
 export const GOAL_TITLE_LIMIT = 255;
 export const MAX_SUBGOALS = 30;
@@ -9,7 +12,10 @@ export type DraftTask = {
   id: string;
   title: string;
   isLoop: boolean;
-  completed: boolean;
+  /** 一回タスクの完了日時（ISO 8601）。未完了なら null */
+  completedAt: string | null;
+  /** 定期タスクを完了した活動日の一覧（重複なし）。完了フラグは持たず、ここから計算する */
+  doneOn: ActivityDate[];
   createdAt: number;
 };
 
@@ -37,8 +43,21 @@ export type PlanDraftAction =
   | { type: "subgoal/select"; subgoalId: string }
   | { type: "task/add"; subgoalId: string; task: DraftTask }
   | { type: "task/rename"; subgoalId: string; taskId: string; title: string }
-  | { type: "task/toggleLoop"; subgoalId: string; taskId: string }
-  | { type: "task/toggleComplete"; subgoalId: string; taskId: string }
+  // today / at は reducer を純粋に保つため呼び出し側（hook）が渡す
+  | {
+      type: "task/toggleLoop";
+      subgoalId: string;
+      taskId: string;
+      today: ActivityDate;
+      at: string;
+    }
+  | {
+      type: "task/toggleComplete";
+      subgoalId: string;
+      taskId: string;
+      today: ActivityDate;
+      at: string;
+    }
   | { type: "task/delete"; subgoalId: string; taskId: string }
   | { type: "task/move"; subgoalId: string; activeId: string; overId: string };
 
@@ -64,7 +83,8 @@ export const createEmptyTask = (): DraftTask => ({
   id: createId("task"),
   title: "",
   isLoop: false,
-  completed: false,
+  completedAt: null,
+  doneOn: [],
   createdAt: Date.now(),
 });
 
@@ -82,11 +102,58 @@ export const createInitialPlanDraft = (): PlanDraftState => {
  * 純粋関数
  * -------------------------------------------------------*/
 
-/** サブゴールの進み具合（完了数 / 全体数） */
-export function subgoalProgress(subgoal: DraftSubgoal) {
+/**
+ * その活動日にタスクが完了しているか。
+ * 定期タスクは「その日の完了記録があるか」で判定するため、日付が変わると自然に未完了へ戻る
+ */
+export function isTaskDone(task: DraftTask, today: ActivityDate): boolean {
+  return task.isLoop ? task.doneOn.includes(today) : task.completedAt !== null;
+}
+
+/** サブゴールの進み具合（その活動日時点の完了数 / 全体数） */
+export function subgoalProgress(subgoal: DraftSubgoal, today: ActivityDate) {
   const total = subgoal.tasks.length;
-  const done = subgoal.tasks.filter((t) => t.completed).length;
+  const done = subgoal.tasks.filter((t) => isTaskDone(t, today)).length;
   return { done, total, isComplete: total > 0 && done === total };
+}
+
+/** 完了を切り替えた新しいタスクを返す */
+function toggleDone(
+  task: DraftTask,
+  today: ActivityDate,
+  at: string
+): DraftTask {
+  if (task.isLoop) {
+    const doneOn = task.doneOn.includes(today)
+      ? task.doneOn.filter((d) => d !== today)
+      : [...task.doneOn, today];
+    return { ...task, doneOn };
+  }
+  return { ...task, completedAt: task.completedAt ? null : at };
+}
+
+/**
+ * 定期 / 一回を切り替えた新しいタスクを返す。
+ * 画面に出ている完了状態（今日完了しているか）を切り替え後も引き継ぐ。過去の記録は消さない
+ */
+function toggleKind(
+  task: DraftTask,
+  today: ActivityDate,
+  at: string
+): DraftTask {
+  const doneNow = isTaskDone(task, today);
+  if (task.isLoop) {
+    return { ...task, isLoop: false, completedAt: doneNow ? at : null };
+  }
+  const doneOn =
+    doneNow && !task.doneOn.includes(today)
+      ? [...task.doneOn, today]
+      : task.doneOn;
+  return {
+    ...task,
+    isLoop: true,
+    doneOn: doneNow ? doneOn : task.doneOn.filter((d) => d !== today),
+  };
 }
 
 /** activeId の要素を overId の位置へ移動した新しい配列を返す */
@@ -189,7 +256,7 @@ export function planDraftReducer(
       return updateSubgoal(state, action.subgoalId, (s) => ({
         ...s,
         tasks: s.tasks.map((t) =>
-          t.id === action.taskId ? { ...t, isLoop: !t.isLoop } : t
+          t.id === action.taskId ? toggleKind(t, action.today, action.at) : t
         ),
       }));
 
@@ -197,7 +264,7 @@ export function planDraftReducer(
       return updateSubgoal(state, action.subgoalId, (s) => ({
         ...s,
         tasks: s.tasks.map((t) =>
-          t.id === action.taskId ? { ...t, completed: !t.completed } : t
+          t.id === action.taskId ? toggleDone(t, action.today, action.at) : t
         ),
       }));
 

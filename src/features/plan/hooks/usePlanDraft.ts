@@ -6,8 +6,13 @@ import {
   createEmptyTask,
   createInitialPlanDraft,
   createSubgoal,
+  isTaskDone,
   planDraftReducer,
+  subgoalProgress,
+  type DraftSubgoal,
+  type DraftTask,
 } from "../model/planDraft";
+import { useToday } from "./useToday";
 
 /**
  * Plan ページの編集状態をまとめて扱うフック（ブラウザ内のみ、リロードで初期化）。
@@ -26,6 +31,17 @@ export function usePlanDraft() {
   );
 
   const canAddSubgoal = state.subgoals.length < MAX_SUBGOALS;
+
+  // 完了状態は記録と「今日」から計算する（日付が変わると定期タスクは自然に未完了へ戻る）
+  const today = useToday();
+  const isDone = useCallback(
+    (task: DraftTask) => isTaskDone(task, today),
+    [today]
+  );
+  const progressOf = useCallback(
+    (subgoal: DraftSubgoal) => subgoalProgress(subgoal, today),
+    [today]
+  );
 
   const saveGoalTitle = useCallback(
     (title: string) => dispatch({ type: "goal/save", title }),
@@ -86,14 +102,26 @@ export function usePlanDraft() {
 
   const toggleTaskLoop = useCallback(
     (subgoalId: string, taskId: string) =>
-      dispatch({ type: "task/toggleLoop", subgoalId, taskId }),
-    []
+      dispatch({
+        type: "task/toggleLoop",
+        subgoalId,
+        taskId,
+        today,
+        at: new Date().toISOString(),
+      }),
+    [today]
   );
 
   const toggleTaskComplete = useCallback(
     (subgoalId: string, taskId: string) =>
-      dispatch({ type: "task/toggleComplete", subgoalId, taskId }),
-    []
+      dispatch({
+        type: "task/toggleComplete",
+        subgoalId,
+        taskId,
+        today,
+        at: new Date().toISOString(),
+      }),
+    [today]
   );
 
   const deleteTask = useCallback(
@@ -113,6 +141,8 @@ export function usePlanDraft() {
     subgoals: state.subgoals,
     selectedSubgoal,
     canAddSubgoal,
+    isDone,
+    progressOf,
     saveGoalTitle,
     addSubgoal,
     renameSubgoal,
