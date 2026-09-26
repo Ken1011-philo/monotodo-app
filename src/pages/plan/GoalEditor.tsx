@@ -69,9 +69,7 @@ export function GoalEditor({ savedTitle, onSave, inputRef }: GoalEditorProps) {
               <Check className="size-3.5" />
               {lastSavedAt.toLocaleTimeString()} にローカル保存しました
             </p>
-          ) : (
-            <p className="text-muted-foreground">空欄のままでも保存できます。</p>
-          )}
+          ) : null}
           <span className="ml-auto font-mono text-muted-foreground">
             {draft.length}/{GOAL_TITLE_LIMIT}
           </span>
