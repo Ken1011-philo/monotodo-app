@@ -107,6 +107,9 @@ export default function PlanPage() {
                   onRenameTask={(taskId, title) =>
                     plan.renameTask(selectedSubgoal.id, taskId, title)
                   }
+                  onToggleTaskComplete={(taskId) =>
+                    plan.toggleTaskComplete(selectedSubgoal.id, taskId)
+                  }
                   onToggleTaskLoop={(taskId) =>
                     plan.toggleTaskLoop(selectedSubgoal.id, taskId)
                   }

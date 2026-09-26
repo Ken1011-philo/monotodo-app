@@ -1,37 +1,49 @@
 import type { KeyboardEvent, Ref } from "react";
 import { Repeat, Trash2 } from "lucide-react";
 
+import { RowMenu } from "@/components/common/RowMenu";
 import {
   DragHandle,
   type SortableHandleProps,
 } from "@/components/common/SortableList";
-import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import type { DraftTask } from "@/features/plan/model/planDraft";
+import { revealOnHover } from "@/lib/revealOnHover";
 import { cn } from "@/lib/utils";
 
 type TaskRowProps = {
   task: DraftTask;
   index: number;
-  handleProps: SortableHandleProps;
-  isDragging: boolean;
+  /** 入力欄の読み上げ名（例：「タスク1」） */
+  inputLabel: string;
+  /** 並べ替えできない行（完了済み）では渡さない */
+  handleProps?: SortableHandleProps;
+  isDragging?: boolean;
   inputRef?: Ref<HTMLInputElement>;
   onRename: (title: string) => void;
   /** Enter（IME 確定を除く）で呼ばれる */
   onEnter: () => void;
+  onToggleComplete: () => void;
   onToggleLoop: () => void;
   onDelete: () => void;
 };
 
-/** タスク 1 行の表示。状態は持たず、操作はすべて props で受け取る */
+/**
+ * タスク 1 行の表示。状態は持たず、操作はすべて props で受け取る。
+ * Google ToDo リストにならい、常に見せるのはチェックと名前だけにし、
+ * 並べ替えハンドルと「︙」メニューはポインタを乗せたとき / フォーカス時に出す。
+ */
 export function TaskRow({
   task,
   index,
+  inputLabel,
   handleProps,
-  isDragging,
+  isDragging = false,
   inputRef,
   onRename,
   onEnter,
+  onToggleComplete,
   onToggleLoop,
   onDelete,
 }: TaskRowProps) {
@@ -46,50 +58,65 @@ export function TaskRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 rounded-lg px-1 py-1.5 sm:gap-2",
+        "group/row flex items-center gap-1 rounded-lg py-1",
         isDragging && "bg-accent shadow-lg ring-1 ring-primary/40"
       )}
     >
-      <DragHandle handleProps={handleProps} label={`${label}を並べ替え`} />
-      {/* スマホでは入力欄の幅を優先して番号を省く（aria-label に番号を含む） */}
-      <span className="hidden w-5 shrink-0 text-right text-xs font-semibold text-muted-foreground sm:inline">
-        {index + 1}.
-      </span>
+      {handleProps ? (
+        <DragHandle
+          handleProps={handleProps}
+          label={`${label}を並べ替え`}
+          className={cn(revealOnHover, isDragging && "md:opacity-100")}
+        />
+      ) : (
+        // 並べ替えできない行も、チェックの位置をそろえるために同じ幅を空ける
+        <span aria-hidden className="size-9 shrink-0" />
+      )}
+
+      <Checkbox
+        checked={task.completed}
+        onCheckedChange={onToggleComplete}
+        aria-label={`${label}を完了にする`}
+        className="mx-1.5 size-5 rounded-full border-muted-foreground/70"
+      />
+
       <Input
         ref={inputRef}
         value={task.title}
         onChange={(event) => onRename(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="タスクを入力"
-        aria-label={`タスク${index + 1}`}
-        className="min-w-0 flex-1"
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        aria-pressed={task.isLoop}
-        aria-label={`${label}：${task.isLoop ? "定期" : "一回"}（切り替え）`}
-        onClick={onToggleLoop}
+        aria-label={inputLabel}
         className={cn(
-          "w-16 shrink-0 px-2 text-xs",
-          task.isLoop &&
-            "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary dark:border-primary/40 dark:bg-primary/10"
+          // 普段は枠を出さず、ポインタを乗せたとき・編集中だけ入力欄として見せる
+          "min-w-0 flex-1 border-transparent bg-transparent px-2 shadow-none hover:border-input dark:bg-transparent",
+          task.completed && "text-muted-foreground line-through"
         )}
-      >
-        {task.isLoop && <Repeat className="size-3.5" />}
-        {task.isLoop ? "定期" : "一回"}
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={`${label}を削除`}
-        onClick={onDelete}
-        className="shrink-0 text-muted-foreground"
-      >
-        <Trash2 />
-      </Button>
+      />
+
+      {task.isLoop && (
+        <span
+          className="flex shrink-0 items-center px-1 text-primary"
+          title="定期タスク"
+        >
+          <Repeat className="size-4" aria-hidden />
+          <span className="sr-only">定期タスク</span>
+        </span>
+      )}
+
+      <RowMenu
+        label={`${label}のメニュー`}
+        className={revealOnHover}
+        items={[
+          { label: "定期タスク", checked: task.isLoop, onSelect: onToggleLoop },
+          {
+            label: "削除",
+            icon: Trash2,
+            destructive: true,
+            onSelect: onDelete,
+          },
+        ]}
+      />
     </div>
   );
 }
