@@ -29,6 +29,8 @@ type SubgoalTaskPanelProps = {
   /** 0 始まりの並び順 */
   index: number;
   total: number;
+  /** 今日の時点で完了しているか（定期タスクは日付が変わると未完了に戻る） */
+  isDone: (task: DraftTask) => boolean;
   onRename: (title: string) => void;
   /** 追加できた場合は新しいタスクの ID を返す */
   onAddTask: () => string | null;
@@ -47,6 +49,7 @@ export function SubgoalTaskPanel({
   subgoal,
   index,
   total,
+  isDone,
   onRename,
   onAddTask,
   onRenameTask,
@@ -63,8 +66,8 @@ export function SubgoalTaskPanel({
   const [showCompleted, setShowCompleted] = useState(false);
   const completedListId = useId();
 
-  const activeTasks = subgoal.tasks.filter((t) => !t.completed);
-  const completedTasks = subgoal.tasks.filter((t) => t.completed);
+  const activeTasks = subgoal.tasks.filter((t) => !isDone(t));
+  const completedTasks = subgoal.tasks.filter((t) => isDone(t));
   const limitReached = subgoal.tasks.length >= MAX_TASKS_PER_SUBGOAL;
 
   const addTaskAndFocus = () => {
@@ -91,14 +94,13 @@ export function SubgoalTaskPanel({
     task: DraftTask,
     i: number,
     list: DraftTask[],
-    sortable?: { handleProps: SortableHandleProps; isDragging: boolean },
+    sortable?: { handleProps: SortableHandleProps; isDragging: boolean }
   ) => (
     <TaskRow
       task={task}
       index={i}
-      inputLabel={
-        task.completed ? `完了済みのタスク${i + 1}` : `タスク${i + 1}`
-      }
+      done={isDone(task)}
+      inputLabel={isDone(task) ? `完了済みのタスク${i + 1}` : `タスク${i + 1}`}
       handleProps={sortable?.handleProps}
       isDragging={sortable?.isDragging}
       inputRef={registerInput(task.id)}
@@ -185,7 +187,7 @@ export function SubgoalTaskPanel({
             <ChevronDown
               className={cn(
                 "transition-transform",
-                !showCompleted && "-rotate-90",
+                !showCompleted && "-rotate-90"
               )}
             />
             完了済み（{completedTasks.length}）
@@ -235,14 +237,14 @@ function usePendingFocus(
       if (element) inputs.current.set(id, element);
       else inputs.current.delete(id);
     },
-    [],
+    []
   );
 
   const focusWhenRendered = useCallback(
     (id: string | null, options?: { select?: boolean }) => {
       pending.current = { id, select: options?.select ?? false };
     },
-    [],
+    []
   );
 
   return { registerInput, focusWhenRendered };

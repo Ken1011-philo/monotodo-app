@@ -37,6 +37,7 @@ export default function PlanPage() {
       subgoals={plan.subgoals}
       selectedSubgoalId={selectedSubgoal?.id ?? null}
       canAddSubgoal={plan.canAddSubgoal}
+      progressOf={plan.progressOf}
       onSelect={(id) => {
         plan.selectSubgoal(id);
         options?.afterSelect?.();
@@ -100,6 +101,7 @@ export default function PlanPage() {
                   subgoal={selectedSubgoal}
                   index={selectedIndex}
                   total={plan.subgoals.length}
+                  isDone={plan.isDone}
                   onRename={(title) =>
                     plan.renameSubgoal(selectedSubgoal.id, title)
                   }

@@ -17,6 +17,8 @@ type TaskRowProps = {
   index: number;
   /** 入力欄の読み上げ名（例：「タスク1」） */
   inputLabel: string;
+  /** 今日の時点で完了しているか（判定は呼び出し側） */
+  done: boolean;
   /** 並べ替えできない行（完了済み）では渡さない */
   handleProps?: SortableHandleProps;
   isDragging?: boolean;
@@ -38,6 +40,7 @@ export function TaskRow({
   task,
   index,
   inputLabel,
+  done,
   handleProps,
   isDragging = false,
   inputRef,
@@ -74,7 +77,7 @@ export function TaskRow({
       )}
 
       <Checkbox
-        checked={task.completed}
+        checked={done}
         onCheckedChange={onToggleComplete}
         aria-label={`${label}を完了にする`}
         className="mx-1.5 size-5 rounded-full border-muted-foreground/70"
@@ -90,7 +93,7 @@ export function TaskRow({
         className={cn(
           // 普段は枠を出さず、ポインタを乗せたとき・編集中だけ入力欄として見せる
           "min-w-0 flex-1 border-transparent bg-transparent px-2 shadow-none hover:border-input dark:bg-transparent",
-          task.completed && "text-muted-foreground line-through"
+          done && "text-muted-foreground line-through"
         )}
       />
 

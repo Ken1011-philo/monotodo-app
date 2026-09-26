@@ -4,9 +4,9 @@ import { Check, Repeat, Trash2 } from "lucide-react";
 import { RowMenu } from "@/components/common/RowMenu";
 import { DragHandle, SortableList } from "@/components/common/SortableList";
 import { Button } from "@/components/ui/button";
-import {
+import type {
+  DraftSubgoal,
   subgoalProgress,
-  type DraftSubgoal,
 } from "@/features/plan/model/planDraft";
 import { revealOnHover } from "@/lib/revealOnHover";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,8 @@ type PlanSidebarProps = {
   subgoals: DraftSubgoal[];
   selectedSubgoalId: string | null;
   canAddSubgoal: boolean;
+  /** 今日の時点の進み具合（判定は呼び出し側） */
+  progressOf: (subgoal: DraftSubgoal) => ReturnType<typeof subgoalProgress>;
   onSelect: (subgoalId: string) => void;
   onMove: (activeId: string, overId: string) => void;
   onDelete: (subgoalId: string) => void;
@@ -35,6 +37,7 @@ export function PlanSidebar({
   subgoals,
   selectedSubgoalId,
   canAddSubgoal,
+  progressOf,
   onSelect,
   onMove,
   onDelete,
@@ -75,12 +78,12 @@ export function PlanSidebar({
           const label = subgoalLabel(subgoal, index);
           const selected = subgoal.id === selectedSubgoalId;
           const hasLoop = subgoal.tasks.some((t) => t.isLoop);
-          const progress = subgoalProgress(subgoal);
+          const progress = progressOf(subgoal);
           return (
             <RoadmapRow
               className={cn(
                 "group/row rounded-lg",
-                isDragging && "bg-accent shadow-lg ring-1 ring-primary/40",
+                isDragging && "bg-accent shadow-lg ring-1 ring-primary/40"
               )}
               handle={
                 <DragHandle
@@ -122,7 +125,7 @@ export function PlanSidebar({
                 className={cn(
                   "h-auto w-full min-w-0 justify-start px-2 py-1.5 text-left font-normal",
                   selected &&
-                    "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                    "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
                 )}
               >
                 <span className="flex min-w-0 flex-col">
@@ -130,7 +133,7 @@ export function PlanSidebar({
                     className={cn(
                       "truncate text-base",
                       selected && "font-semibold",
-                      !subgoal.title.trim() && "text-muted-foreground",
+                      !subgoal.title.trim() && "text-muted-foreground"
                     )}
                   >
                     {label}
@@ -180,7 +183,7 @@ export function PlanSidebar({
             <span
               className={cn(
                 "truncate text-base",
-                !goalTitle && "font-normal text-muted-foreground",
+                !goalTitle && "font-normal text-muted-foreground"
               )}
             >
               {goalTitle || "ゴール未設定"}
@@ -235,7 +238,7 @@ function RoadmapRow({
     <div
       className={cn(
         "relative grid grid-cols-[var(--handle-col)_1.25rem_minmax(0,1fr)_auto] items-center py-0.5",
-        className,
+        className
       )}
     >
       <div className="flex justify-center">{handle}</div>
@@ -260,7 +263,7 @@ function StartNode() {
       aria-hidden
       className={cn(
         "block size-3 rounded-full border-2 border-muted-foreground",
-        nodeFill,
+        nodeFill
       )}
     />
   );
@@ -280,7 +283,7 @@ function SubgoalNode({
         aria-hidden
         className={cn(
           "flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground",
-          selected && "shadow-[0_0_0_4px] shadow-primary/20",
+          selected && "shadow-[0_0_0_4px] shadow-primary/20"
         )}
       >
         <Check className="size-3" strokeWidth={3} />
@@ -294,7 +297,7 @@ function SubgoalNode({
         "block size-3.5 rounded-full border-2",
         selected
           ? "border-primary bg-primary shadow-[0_0_0_4px] shadow-primary/20"
-          : cn("border-muted-foreground", nodeFill),
+          : cn("border-muted-foreground", nodeFill)
       )}
     />
   );
@@ -306,7 +309,7 @@ function AddNode() {
       aria-hidden
       className={cn(
         "block size-2.5 rounded-full border border-dashed border-muted-foreground",
-        nodeFill,
+        nodeFill
       )}
     />
   );
@@ -318,7 +321,7 @@ function GoalNode() {
       aria-hidden
       className={cn(
         "flex size-5 items-center justify-center rounded-full border-2 border-primary",
-        nodeFill,
+        nodeFill
       )}
     >
       <span className="block size-2 rounded-full bg-primary" />
