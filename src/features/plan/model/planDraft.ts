@@ -9,6 +9,7 @@ export type DraftTask = {
   id: string;
   title: string;
   isLoop: boolean;
+  completed: boolean;
   createdAt: number;
 };
 
@@ -37,6 +38,7 @@ export type PlanDraftAction =
   | { type: "task/add"; subgoalId: string; task: DraftTask }
   | { type: "task/rename"; subgoalId: string; taskId: string; title: string }
   | { type: "task/toggleLoop"; subgoalId: string; taskId: string }
+  | { type: "task/toggleComplete"; subgoalId: string; taskId: string }
   | { type: "task/delete"; subgoalId: string; taskId: string }
   | { type: "task/move"; subgoalId: string; activeId: string; overId: string };
 
@@ -62,6 +64,7 @@ export const createEmptyTask = (): DraftTask => ({
   id: createId("task"),
   title: "",
   isLoop: false,
+  completed: false,
   createdAt: Date.now(),
 });
 
@@ -78,6 +81,13 @@ export const createInitialPlanDraft = (): PlanDraftState => {
 /* ---------------------------------------------------------
  * 純粋関数
  * -------------------------------------------------------*/
+
+/** サブゴールの進み具合（完了数 / 全体数） */
+export function subgoalProgress(subgoal: DraftSubgoal) {
+  const total = subgoal.tasks.length;
+  const done = subgoal.tasks.filter((t) => t.completed).length;
+  return { done, total, isComplete: total > 0 && done === total };
+}
 
 /** activeId の要素を overId の位置へ移動した新しい配列を返す */
 export function moveById<T extends { id: string }>(
@@ -180,6 +190,14 @@ export function planDraftReducer(
         ...s,
         tasks: s.tasks.map((t) =>
           t.id === action.taskId ? { ...t, isLoop: !t.isLoop } : t
+        ),
+      }));
+
+    case "task/toggleComplete":
+      return updateSubgoal(state, action.subgoalId, (s) => ({
+        ...s,
+        tasks: s.tasks.map((t) =>
+          t.id === action.taskId ? { ...t, completed: !t.completed } : t
         ),
       }));
 

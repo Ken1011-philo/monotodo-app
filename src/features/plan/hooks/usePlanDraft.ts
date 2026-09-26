@@ -90,6 +90,12 @@ export function usePlanDraft() {
     []
   );
 
+  const toggleTaskComplete = useCallback(
+    (subgoalId: string, taskId: string) =>
+      dispatch({ type: "task/toggleComplete", subgoalId, taskId }),
+    []
+  );
+
   const deleteTask = useCallback(
     (subgoalId: string, taskId: string) =>
       dispatch({ type: "task/delete", subgoalId, taskId }),
@@ -116,6 +122,7 @@ export function usePlanDraft() {
     addTask,
     renameTask,
     toggleTaskLoop,
+    toggleTaskComplete,
     deleteTask,
     moveTask,
   };
