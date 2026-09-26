@@ -107,7 +107,6 @@ const NowCard: React.FC<NowCardProps> = ({ task, onStart }) => {
         <SectionHeader
           eyebrow="Now"
           title="今やるタスク"
-          description="いま集中するタスクはこれだけです。"
         />
       </CardHeader>
 
@@ -153,7 +152,7 @@ const EmptyNowCard: React.FC = () => (
       <SectionHeader
         eyebrow="Now"
         title="今やるタスクはありません"
-        description="今日やるタスクは Plan ページで決めてください。Plan の一番上のタスクが、ここに 1 件だけ表示されます。"
+        description="Plan でタスクを決めましょう。"
       />
     </CardHeader>
     <CardFooter>
@@ -186,7 +185,6 @@ const TodayCard: React.FC<TodayCardProps> = ({ stats }) => {
         <SectionHeader
           eyebrow="Today"
           title="今日の記録"
-          description="今日の進捗サマリーです。数値だけを見て次の意思決定を軽くします。"
         />
       </CardHeader>
 
