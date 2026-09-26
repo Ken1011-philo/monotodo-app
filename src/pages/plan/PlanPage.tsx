@@ -142,7 +142,6 @@ function EmptySubgoalState({
         as="h3"
         eyebrow="Subgoal"
         title="サブゴールを追加しましょう"
-        description="目標までの道のりを、いくつかの区切りに分けてみましょう。"
       />
       <SubgoalAddForm count={count} canAdd={canAdd} onAdd={onAdd} />
     </div>

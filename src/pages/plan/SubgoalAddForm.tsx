@@ -57,16 +57,11 @@ export function SubgoalAddForm({
           <Plus />
         </Button>
       </div>
-      <p
-        className={cn(
-          "text-xs",
-          canAdd ? "text-muted-foreground" : "text-destructive"
-        )}
-      >
-        {canAdd
-          ? `Enter でも追加できます（${count}/${MAX_SUBGOALS}）`
-          : `サブゴールは ${MAX_SUBGOALS} 件が上限です（${count}/${MAX_SUBGOALS}）`}
-      </p>
+      {!canAdd && (
+        <p className="text-xs text-destructive">
+          サブゴールは {MAX_SUBGOALS} 件が上限です（{count}/{MAX_SUBGOALS}）
+        </p>
+      )}
     </form>
   );
 }

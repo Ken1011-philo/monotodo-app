@@ -9,7 +9,6 @@ import {
   MAX_TASKS_PER_SUBGOAL,
   type DraftSubgoal,
 } from "@/features/plan/model/planDraft";
-import { cn } from "@/lib/utils";
 import { TaskRow } from "./TaskRow";
 
 type SubgoalTaskPanelProps = {
@@ -67,13 +66,10 @@ export function SubgoalTaskPanel({
           value={subgoal.title}
           onChange={(event) => onRename(event.target.value)}
           onKeyDown={handleTitleKeyDown}
-          placeholder="サブゴールタイトル（例：マリーゴールドを弾けるようになる）"
+          placeholder="サブゴール名を入力"
           aria-label={`サブゴール${index + 1}のタイトル`}
           className="h-11 text-lg font-semibold"
         />
-        <p className="text-xs text-muted-foreground">
-          Enter で新しいタスク行を追加します。
-        </p>
       </div>
 
       {subgoal.tasks.length > 0 ? (
@@ -114,16 +110,11 @@ export function SubgoalTaskPanel({
           <Plus />
           タスクを追加
         </Button>
-        <p
-          className={cn(
-            "text-xs",
-            limitReached ? "text-destructive" : "text-muted-foreground"
-          )}
-        >
-          {limitReached
-            ? `タスクは ${MAX_TASKS_PER_SUBGOAL} 件が上限です。`
-            : "Enter からの追加も可能です。"}
-        </p>
+        {limitReached && (
+          <p className="text-xs text-destructive">
+            タスクは {MAX_TASKS_PER_SUBGOAL} 件が上限です。
+          </p>
+        )}
       </div>
     </section>
   );

@@ -60,7 +60,7 @@ export function TaskRow({
         value={task.title}
         onChange={(event) => onRename(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="タスクを入力（例：Aマイナーを弾けるようになる）"
+        placeholder="タスクを入力"
         aria-label={`タスク${index + 1}`}
         className="min-w-0 flex-1"
       />

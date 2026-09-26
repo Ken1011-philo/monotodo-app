@@ -73,7 +73,8 @@ export function SubgoalSwitcher({
       >
         <SheetHeader>
           <SheetTitle>ロードマップ</SheetTitle>
-          <SheetDescription>
+          {/* 画面上は省き、読み上げ用の説明だけ残す */}
+          <SheetDescription className="sr-only">
             サブゴールを選ぶと、そのタスクが表示されます。
           </SheetDescription>
         </SheetHeader>

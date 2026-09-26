@@ -41,9 +41,6 @@ export function GoalEditor({ savedTitle, onSave, inputRef }: GoalEditorProps) {
         <Label htmlFor={INPUT_ID} className="text-lg">
           達成したい目標
         </Label>
-        <p className="text-sm text-muted-foreground">
-          あいまいで短くても大丈夫です。やりたい事として言語化しておきましょう。
-        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -52,7 +49,7 @@ export function GoalEditor({ savedTitle, onSave, inputRef }: GoalEditorProps) {
           ref={inputRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="例：ギターが上手くなりたい（空欄でもOK）"
+          placeholder="例：ギターが上手くなりたい"
           aria-invalid={error ? "true" : "false"}
           aria-describedby={`${INPUT_ID}-status`}
           autoComplete="off"
