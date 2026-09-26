@@ -80,15 +80,20 @@ export default function PlanPage() {
           </SubgoalSwitcher>
         </div>
 
-        <Card>
-          <CardContent className="space-y-6 px-4 sm:px-6">
-            <GoalEditor
-              savedTitle={plan.goalTitle}
-              onSave={plan.saveGoalTitle}
-              inputRef={goalInputRef}
-            />
+        {/* Goal と選択中サブゴールは別のカードに分ける */}
+        <div className="flex min-w-0 flex-col gap-6">
+          <Card>
+            <CardContent className="px-4 sm:px-6">
+              <GoalEditor
+                savedTitle={plan.goalTitle}
+                onSave={plan.saveGoalTitle}
+                inputRef={goalInputRef}
+              />
+            </CardContent>
+          </Card>
 
-            <div className="border-t pt-6">
+          <Card>
+            <CardContent className="px-4 sm:px-6">
               {selectedSubgoal ? (
                 <SubgoalTaskPanel
                   key={selectedSubgoal.id}
@@ -119,9 +124,9 @@ export default function PlanPage() {
                   onAdd={plan.addSubgoal}
                 />
               )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -137,7 +142,7 @@ function EmptySubgoalState({
   onAdd: (title: string) => string | null;
 }) {
   return (
-    <div className="space-y-4 rounded-lg border border-dashed px-4 py-6">
+    <div className="space-y-4">
       <SectionHeader
         as="h3"
         eyebrow="Subgoal"
