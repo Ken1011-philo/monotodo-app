@@ -22,7 +22,7 @@ type PlanSidebarProps = {
 };
 
 /**
- * スタート → サブゴール… → Goal のロードマップ。
+ * Start → サブゴール… → Goal のロードマップ。
  * PC のサイドとスマホの Sheet の両方で使うため、表示と操作の受け渡しだけを担う。
  */
 export function PlanSidebar({
@@ -58,7 +58,7 @@ export function PlanSidebar({
       />
 
       <RoadmapRow node={<StartNode />}>
-        <span className="px-2 text-sm text-muted-foreground">スタート</span>
+        <span className="px-2 text-sm text-muted-foreground">Start</span>
       </RoadmapRow>
 
       <SortableList
