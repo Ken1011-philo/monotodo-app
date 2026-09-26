@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardAction,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -20,7 +19,6 @@ export default function SettingPage() {
         as="h1"
         eyebrow="Setting"
         title="設定"
-        description="現在は、認証やバックエンド接続を使わずに画面を確認できるデモモードです。"
       />
 
       <Card>
@@ -33,9 +31,6 @@ export default function SettingPage() {
             <Badge variant="outline">無効</Badge>
           </CardAction>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          これらは一時的に無効化しています。データ設計を確定してから、この画面に設定機能を戻します。
-        </CardContent>
       </Card>
 
       <Alert>
