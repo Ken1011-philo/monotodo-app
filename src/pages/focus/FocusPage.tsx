@@ -190,7 +190,6 @@ export default function FocusPage() {
           align="center"
           eyebrow="Focus"
           title="ポモドーロタイマー"
-          description="ナビゲーションを排除し、一つのタスクに集中します。"
         />
       </CardHeader>
 
