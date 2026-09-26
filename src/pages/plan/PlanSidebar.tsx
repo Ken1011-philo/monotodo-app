@@ -1,9 +1,14 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Repeat, Trash2 } from "lucide-react";
+import { Check, Repeat, Trash2 } from "lucide-react";
 
+import { RowMenu } from "@/components/common/RowMenu";
 import { DragHandle, SortableList } from "@/components/common/SortableList";
 import { Button } from "@/components/ui/button";
-import type { DraftSubgoal } from "@/features/plan/model/planDraft";
+import {
+  subgoalProgress,
+  type DraftSubgoal,
+} from "@/features/plan/model/planDraft";
+import { revealOnHover } from "@/lib/revealOnHover";
 import { cn } from "@/lib/utils";
 import { DeleteSubgoalDialog } from "./DeleteSubgoalDialog";
 import { SubgoalAddForm } from "./SubgoalAddForm";
@@ -70,38 +75,42 @@ export function PlanSidebar({
           const label = subgoalLabel(subgoal, index);
           const selected = subgoal.id === selectedSubgoalId;
           const hasLoop = subgoal.tasks.some((t) => t.isLoop);
+          const progress = subgoalProgress(subgoal);
           return (
             <RoadmapRow
               className={cn(
-                "group rounded-lg",
-                isDragging && "bg-accent shadow-lg ring-1 ring-primary/40"
+                "group/row rounded-lg",
+                isDragging && "bg-accent shadow-lg ring-1 ring-primary/40",
               )}
               handle={
                 <DragHandle
                   handleProps={handleProps}
                   label={`${label}を並べ替え`}
+                  className={cn(revealOnHover, isDragging && "md:opacity-100")}
                 />
               }
-              node={<SubgoalNode selected={selected} />}
+              node={
+                <SubgoalNode
+                  selected={selected}
+                  completed={progress.isComplete}
+                />
+              }
               trailing={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`${label}を削除`}
-                  onClick={(event) => {
-                    deleteTriggerRef.current = event.currentTarget;
-                    setPendingDelete(subgoal);
-                  }}
-                  className={cn(
-                    "shrink-0 text-muted-foreground transition-opacity",
-                    // PC ではホバー / フォーカス / 選択中のみ表示。タッチ端末（md 未満）は常に表示
-                    !selected &&
-                      "md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-                  )}
-                >
-                  <Trash2 />
-                </Button>
+                <RowMenu
+                  label={`${label}のメニュー`}
+                  className={revealOnHover}
+                  items={[
+                    {
+                      label: "削除",
+                      icon: Trash2,
+                      destructive: true,
+                      onSelect: (trigger) => {
+                        deleteTriggerRef.current = trigger;
+                        setPendingDelete(subgoal);
+                      },
+                    },
+                  ]}
+                />
               }
             >
               <Button
@@ -112,7 +121,8 @@ export function PlanSidebar({
                 title={label}
                 className={cn(
                   "h-auto w-full min-w-0 justify-start px-2 py-1.5 text-left font-normal",
-                  selected && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+                  selected &&
+                    "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
                 )}
               >
                 <span className="flex min-w-0 flex-col">
@@ -120,13 +130,18 @@ export function PlanSidebar({
                     className={cn(
                       "truncate text-base",
                       selected && "font-semibold",
-                      !subgoal.title.trim() && "text-muted-foreground"
+                      !subgoal.title.trim() && "text-muted-foreground",
                     )}
                   >
                     {label}
                   </span>
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    {subgoal.tasks.length}件
+                    {progress.total > 0
+                      ? `${progress.done}/${progress.total}件`
+                      : "0件"}
+                    {progress.isComplete && (
+                      <span className="sr-only">（すべて完了）</span>
+                    )}
                     {hasLoop && (
                       <>
                         <Repeat className="size-3" aria-hidden />
@@ -159,11 +174,13 @@ export function PlanSidebar({
           className="h-auto w-full min-w-0 justify-start px-2 py-1.5 text-left"
         >
           <span className="flex min-w-0 flex-col">
-            <span className="text-xs font-normal text-muted-foreground">Goal</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              Goal
+            </span>
             <span
               className={cn(
                 "truncate text-base",
-                !goalTitle && "font-normal text-muted-foreground"
+                !goalTitle && "font-normal text-muted-foreground",
               )}
             >
               {goalTitle || "ゴール未設定"}
@@ -188,7 +205,9 @@ export function PlanSidebar({
           const trigger = deleteTriggerRef.current;
           deleteTriggerRef.current = null;
           if (trigger?.isConnected) return trigger;
-          return navRef.current?.querySelector<HTMLElement>("[aria-current]") ?? null;
+          return (
+            navRef.current?.querySelector<HTMLElement>("[aria-current]") ?? null
+          );
         }}
       />
     </nav>
@@ -216,7 +235,7 @@ function RoadmapRow({
     <div
       className={cn(
         "relative grid grid-cols-[var(--handle-col)_1.25rem_minmax(0,1fr)_auto] items-center py-0.5",
-        className
+        className,
       )}
     >
       <div className="flex justify-center">{handle}</div>
@@ -241,13 +260,33 @@ function StartNode() {
       aria-hidden
       className={cn(
         "block size-3 rounded-full border-2 border-muted-foreground",
-        nodeFill
+        nodeFill,
       )}
     />
   );
 }
 
-function SubgoalNode({ selected }: { selected: boolean }) {
+function SubgoalNode({
+  selected,
+  completed,
+}: {
+  selected: boolean;
+  /** すべてのタスクが完了したサブゴールは ✓ で示す */
+  completed: boolean;
+}) {
+  if (completed) {
+    return (
+      <span
+        aria-hidden
+        className={cn(
+          "flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground",
+          selected && "shadow-[0_0_0_4px] shadow-primary/20",
+        )}
+      >
+        <Check className="size-3" strokeWidth={3} />
+      </span>
+    );
+  }
   return (
     <span
       aria-hidden
@@ -255,7 +294,7 @@ function SubgoalNode({ selected }: { selected: boolean }) {
         "block size-3.5 rounded-full border-2",
         selected
           ? "border-primary bg-primary shadow-[0_0_0_4px] shadow-primary/20"
-          : cn("border-muted-foreground", nodeFill)
+          : cn("border-muted-foreground", nodeFill),
       )}
     />
   );
@@ -267,7 +306,7 @@ function AddNode() {
       aria-hidden
       className={cn(
         "block size-2.5 rounded-full border border-dashed border-muted-foreground",
-        nodeFill
+        nodeFill,
       )}
     />
   );
@@ -279,7 +318,7 @@ function GoalNode() {
       aria-hidden
       className={cn(
         "flex size-5 items-center justify-center rounded-full border-2 border-primary",
-        nodeFill
+        nodeFill,
       )}
     >
       <span className="block size-2 rounded-full bg-primary" />
